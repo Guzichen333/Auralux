@@ -1,0 +1,138 @@
+﻿appId: io.github.auralux.app
+productName: Auralux
+copyright: Copyright 2026 Auralux Contributors
+directories:
+  output: dist
+  buildResources: build
+files:
+  - dist/main/**/*
+  - src/renderer/public/**/*
+  - node_modules/**/*
+  - "!node_modules/**/{CHANGELOG.md,README.md,readme.md,readme.txt,author,authors,contributors,copying,copyright,*license*,licence*,notice,Notice}"
+  - "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
+  - "!node_modules/**/*.d.ts"
+  - "!node_modules/.bin"
+  - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!.editorconfig"
+  - "!**/._*"
+  - "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}"
+  - "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}"
+  - "!**/{appveyor.yml,.travis.yml,circle.yml}"
+  - "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+  - "!**/requirements.txt"
+  - "!**/pyinstaller.spec"
+  - "!**/nuitka.config"
+  - "!**/build/pyinstaller/**/*"
+  - "!**/dist/python-modules/**/*"
+  - "!src/main/metadata_editor*"
+
+asarUnpack:
+  - "dist/main/metadata_editor*"
+  - "dist/main/NativeAudio.node"
+
+extraResources:
+  - from: "dist/main/metadata_editor.exe"
+    to: "metadata_editor.exe"
+    filter: ["**/*"]
+  - from: "dist/main/metadata_editor"
+    to: "metadata_editor"
+    filter: ["**/*"]
+  - from: "dist/main/NativeAudio.node"
+    to: "NativeAudio.node"
+    filter: ["**/*"]
+
+# macOS 閰嶇疆
+mac:
+  category: public.app-category.music
+  icon: build/icons/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  # 浠ｇ爜绛惧悕閰嶇疆锛堥渶瑕佸紑鍙戣€呰瘉涔︼級
+  # identity: "Developer ID Application: Your Name (TEAM_ID)"
+  # hardenedRuntime: true
+  # gatekeeperAssess: false
+  # entitlements: build/entitlements.mac.plist
+  # entitlementsInherit: build/entitlements.mac.plist
+
+# Windows 閰嶇疆
+win:
+  icon: build/icons/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+    - target: portable
+      arch:
+        - x64
+        - arm64
+  # 浠ｇ爜绛惧悕閰嶇疆锛堥渶瑕佽瘉涔︼級
+  # certificateFile: path/to/certificate.p12
+  # certificatePassword: ${env.WIN_CSC_KEY_PASSWORD}
+  # signingHashAlgorithms: ['sha256']
+  # signAndEditExecutable: true
+
+# Linux 閰嶇疆
+linux:
+  icon: build/icons/
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+    - target: rpm
+      arch:
+        - x64
+    - target: tar.gz
+      arch:
+        - x64
+  category: AudioVideo
+  synopsis: "鏈湴闊充箰鎾斁鍣?
+  description: "涓€娆鹃珮棰滃€笺€佹彃浠跺寲鐨勬湰鍦伴煶涔愭挱鏀惧櫒"
+  # 娣诲姞妗岄潰鏂囦欢閰嶇疆
+  desktop:
+    Name: Auralux
+    Comment: 娌夋蹈寮忔闈㈤煶涔愭挱鏀惧櫒
+    Categories: AudioVideo;Audio;Player;Plugin;Pluggable;
+
+# NSIS Windows 瀹夎绋嬪簭閰嶇疆
+nsis:
+  artifactName: ${productName}-setup-${version}.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+  installerIcon: build/icons/icon.ico
+  uninstallerIcon: build/icons/icon.ico
+  allowToChangeInstallationDirectory: true
+  oneClick: false
+
+# DMG macOS 瀹夎绋嬪簭閰嶇疆
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  background: build/icons/icon.icns
+  iconSize: 100
+  iconTextSize: 12
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# AppImage Linux 閰嶇疆
+appImage:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+

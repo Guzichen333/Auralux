@@ -1,0 +1,96 @@
+{
+  "id": "netease-cloud-music",
+  "name": "NetEase Cloud Music",
+  "version": "1.0.0",
+  "description": "网易云音乐集成插件 - 搜索、播放、歌单导入、歌词获取",
+  "author": "玄阳子",
+  "main": "extension.js",
+  "module": "neteaseCloudMusicExtension",
+  "canDisable": true,
+  "categories": ["Music"],
+  "keywords": ["netease", "cloud-music", "163", "music", "streaming"],
+  "activationEvents": [
+    "onStartUp",
+    "onCommand:netease.search",
+    "onCommand:netease.login",
+    "onCommand:netease.importPlaylist"
+  ],
+  "permissions": [
+    "player.read",
+    "player.control",
+    "library.read",
+    "library.write",
+    "ui.notification",
+    "ui.dialog",
+    "storage.read",
+    "storage.write",
+    "network.request",
+    "settings.read",
+    "settings.write"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "netease.search",
+        "title": "NetEase: 搜索歌曲"
+      },
+      {
+        "command": "netease.importPlaylist",
+        "title": "NetEase: 导入歌单"
+      },
+      {
+        "command": "netease.login",
+        "title": "NetEase: 登录账号"
+      },
+      {
+        "command": "netease.showSettings",
+        "title": "NetEase: 设置"
+      }
+    ],
+    "configuration": {
+      "title": "NetEase Cloud Music 设置",
+      "properties": {
+        "netease.apiEndpoint": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "NetEaseCloudMusicApi 服务地址"
+        },
+        "netease.defaultQuality": {
+          "type": "string",
+          "default": "exhigh",
+          "enum": ["standard", "higher", "exhigh", "lossless", "hires", "jyeffect", "sky", "jymaster"],
+          "description": "默认音质"
+        },
+        "netease.autoPlay": {
+          "type": "boolean",
+          "default": true,
+          "description": "搜索后自动播放第一首"
+        },
+        "netease.showLyrics": {
+          "type": "boolean",
+          "default": true,
+          "description": "播放时自动获取歌词"
+        },
+        "netease.maxResults": {
+          "type": "integer",
+          "default": 20,
+          "minimum": 5,
+          "maximum": 100,
+          "description": "搜索结果数量"
+        }
+      }
+    },
+    "menus": {
+      "commandPalette": [
+        { "command": "netease.search" },
+        { "command": "netease.importPlaylist" },
+        { "command": "netease.login" },
+        { "command": "netease.showSettings" }
+      ]
+    }
+  },
+  "engines": {
+    "musicbox": "^1.0.0"
+  },
+  "license": "MIT"
+}

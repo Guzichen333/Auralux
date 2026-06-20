@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/pyinstaller/
+native/target/
+test-files/
+.gitnexus/
+*.log
+MusicBox-real-machine-test-*.zip
+
+# IDE files
+.vscode/
+.idea/
+.vs/
+
+tmp/
+output/
+
+.claude
+.codex
+dosdel.bat
+*.docx
+*.doc
+README - 副本.md
+package-lock.json
+.codegraph

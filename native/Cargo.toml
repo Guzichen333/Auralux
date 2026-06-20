@@ -1,0 +1,50 @@
+[package]
+name = "musicbox-native-audio"
+version = "0.1.0"
+edition = "2024"
+authors = ["MusicBox Team"]
+description = "Native audio engine for MusicBox with WASAPI shared/exclusive mode support"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "2.16.17", features = ["compat-mode", "tokio_rt"] }
+napi-derive = "2"
+
+# Rodio - 音频解码和处理
+rodio = { version = "0.21", default-features = false, features = ["symphonia-all",
+    "symphonia-mp3",
+    "symphonia-flac",
+    "symphonia-wav",
+    "symphonia-aac",
+    "symphonia-isomp4",
+]}
+
+# wasapi - WASAPI独占模式音频输出
+wasapi = "0.21"
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_System_Threading"] }
+
+# 线程安全
+parking_lot = "0.12"
+
+# Ringbuf - 音频缓冲区
+ringbuf = "0.4"
+
+# Rubato - 高质量重采样
+rubato = "0.15"
+
+# Biquad - 专业音频滤波器库（用于参量均衡器）
+biquad = "0.5.0"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+strip = true
+
+[profile.dev]
+opt-level = 0

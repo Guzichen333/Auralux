@@ -1,0 +1,344 @@
+// NetEase Cloud Music styles
+
+// 状态指示器胶囊
+.netease-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--color-bg-secondary, rgba(0,0,0,0.06));
+  border: 1px solid var(--color-border, rgba(0,0,0,0.08));
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #666);
+  cursor: default;
+  user-select: none;
+  margin-right: 10px;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.netease-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.netease-dot-online {
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+}
+
+.netease-dot-offline {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+}
+
+.netease-label {
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+// 导入歌单曲目列表
+#netease-import-tracks {
+  > div {
+    display: flex;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 13px;
+    border-bottom: 1px solid var(--color-border-light);
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+}
+
+// Modal 通用样式
+#import-netease-playlist-btn {
+  .sidebar-icon {
+    fill: currentColor;
+  }
+}
+
+#netease-import-modal,
+#netease-login-modal {
+  .modal-dialog {
+    max-height: 85vh;
+  }
+
+  .modal-body {
+    max-height: 70vh;
+  }
+}
+
+#netease-import-modal.netease-import-control-modal {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(7, 9, 12, 0.68);
+  backdrop-filter: blur(10px);
+
+  .modal-dialog {
+    width: min(640px, calc(100vw - 48px));
+    max-width: none;
+    max-height: min(760px, calc(100vh - 48px));
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+    border: 1px solid #292e36;
+    border-radius: 8px;
+    background: #1b1e23;
+    color: #e8eaed;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  }
+
+  .modal-header {
+    min-height: 58px;
+    padding: 16px 18px 12px;
+    border-bottom: 1px solid #232830;
+  }
+
+  .modal-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    color: #e8eaed;
+    font-size: 15px;
+    font-weight: 750;
+    letter-spacing: 0;
+  }
+
+  .netease-modal-mark {
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 30px;
+    border-radius: 6px;
+    background: #e0524a;
+    color: #fbf7f5;
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  .modal-close-btn {
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: #6e747c;
+
+    &:hover {
+      background: #262b32;
+      color: #e8eaed;
+    }
+
+    .icon {
+      width: 16px;
+      height: 16px;
+      fill: none;
+    }
+  }
+
+  .modal-body {
+    min-height: 0;
+    max-height: none;
+    overflow: auto;
+    padding: 16px 18px 12px;
+  }
+
+  .form-group {
+    margin: 0;
+  }
+
+  label {
+    display: block;
+    margin: 0 0 8px;
+    color: #a0a6ae;
+    font-size: 11px;
+    font-weight: 650;
+  }
+
+  .form-input {
+    width: 100%;
+    height: 38px;
+    padding: 0 12px;
+    border: 1px solid #292e36;
+    border-radius: 6px;
+    background: #1f2329;
+    color: #e8eaed;
+    font: 500 13px / 1 "Segoe UI Variable", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    outline: none;
+
+    &::placeholder {
+      color: #6e747c;
+    }
+
+    &:focus {
+      border-color: #3cc7e0;
+      box-shadow: 0 0 0 3px rgba(60, 199, 224, 0.14);
+    }
+  }
+
+  #netease-import-status {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid #232830;
+    border-radius: 6px;
+    background: #1f2329;
+    color: #a0a6ae;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  #netease-import-preview {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: 104px minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  #netease-import-cover {
+    grid-row: span 2;
+
+    img {
+      width: 104px;
+      height: 104px;
+      object-fit: cover;
+      border: 1px solid #292e36;
+      border-radius: 6px;
+      background: #1f2329;
+    }
+  }
+
+  #netease-import-info {
+    min-width: 0;
+    padding-top: 2px;
+
+    h4 {
+      margin: 0;
+      overflow: hidden;
+      color: #e8eaed;
+      font-size: 16px;
+      font-weight: 750;
+      line-height: 1.35;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .netease-import-meta {
+    margin: 5px 0 0;
+    color: #e0524a;
+    font-size: 11px;
+    font-weight: 650;
+  }
+
+  .netease-import-description {
+    max-height: 40px;
+    margin: 8px 0 0;
+    overflow: hidden;
+    color: #a0a6ae;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  #netease-import-tracks {
+    grid-column: 1 / -1;
+    max-height: 280px;
+    overflow: auto;
+    border: 1px solid #232830;
+    border-radius: 6px;
+    background: #15171b;
+  }
+
+  .netease-import-track {
+    height: 34px;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) minmax(80px, 140px) 48px;
+    align-items: center;
+    gap: 10px;
+    padding: 0 10px;
+    border-bottom: 1px solid #232830;
+    color: #a0a6ae;
+    font-size: 13px;
+
+    &:last-child {
+      border-bottom: 0;
+    }
+  }
+
+  .netease-import-track-index,
+  .netease-import-track-artist,
+  .netease-import-track-duration {
+    overflow: hidden;
+    color: #6e747c;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .netease-import-track-title {
+    overflow: hidden;
+    color: #e8eaed;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .netease-import-track-duration {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .netease-import-more {
+    padding: 10px;
+    color: #6e747c;
+    font-size: 11px;
+  }
+
+  .modal-footer {
+    gap: 8px;
+    padding: 12px 18px 16px;
+    border-top: 1px solid #232830;
+  }
+
+  .btn {
+    height: 34px;
+    padding: 0 16px;
+    border: 1px solid #292e36;
+    border-radius: 6px;
+    background: #1f2329;
+    color: #e8eaed;
+    font: 650 13px / 1 "Segoe UI Variable", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+
+    &:hover {
+      background: #262b32;
+    }
+
+    &:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
+  }
+
+  .btn-primary {
+    border-color: #f0634f;
+    background: #f0634f;
+    color: #fbf7f5;
+
+    &:hover {
+      border-color: #ff7a66;
+      background: #ff7a66;
+    }
+  }
+}

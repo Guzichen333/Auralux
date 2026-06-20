@@ -1,0 +1,24 @@
+{
+  "name": "auralux-docs",
+  "version": "1.0.0",
+  "description": "Auralux documentation",
+  "type": "module",
+  "scripts": {
+    "docs:dev": "vitepress dev",
+    "docs:build": "vitepress build",
+    "docs:preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.5.0",
+    "vue": "^3.5.13"
+  },
+  "keywords": [
+    "auralux",
+    "music-player",
+    "electron",
+    "documentation"
+  ],
+  "author": "Auralux Contributors",
+  "license": "MIT"
+}
+
