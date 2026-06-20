@@ -18,6 +18,16 @@ This modified version includes additional UI work, immersive playback views,
 NetEase Cloud Music account integration, playlist sync, and related playback
 changes.
 
+Auralux-specific modifications, additions, branding, UI work, NetEase
+integration work, migration/sync workflows, immersive playback changes,
+documentation, and other original Auralux contributions are licensed under the
+Auralux Non-Commercial License in AURALUX_LICENSE.md.
+
+Commercial use of Auralux-specific modifications is not permitted without prior
+written permission from the Auralux author. This additional restriction does not
+remove or limit rights granted by the original MusicBox MIT License for the
+original MusicBox code.
+
 Third-party components:
 
 - NeteaseCloudMusicApi by binaryify

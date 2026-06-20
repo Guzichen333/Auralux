@@ -104,6 +104,16 @@ npm run build:renderer
 4. 网易云集成仅用于访问用户自己的账号、歌单和相关数据。
 5. 本项目不提供音乐内容，也不绕过任何版权或平台限制。
 
+### 许可证与商业使用
+
+Auralux 采用双层授权说明：
+
+- 原始 MusicBox 代码继续遵循 MIT License，并保留原作者版权声明。
+- Auralux 修改、新增和品牌化部分采用 [Auralux Non-Commercial License](AURALUX_LICENSE.md)，仅允许个人学习、研究和非商业使用。
+- 如需商业使用、商业分发、付费集成、SaaS/托管服务或闭源商用，请先取得 Auralux 作者的单独书面授权。
+
+Auralux 是 source-available 项目，不应被描述为整体 MIT 开源项目。完整声明见 [LICENSE](LICENSE)、[NOTICE.md](NOTICE.md) 和 [AURALUX_LICENSE.md](AURALUX_LICENSE.md)。
+
 ### 致谢
 
 特别感谢 [asxez](https://github.com/asxez) 开发并开源 [MusicBox](https://github.com/asxez/MusicBox)。Auralux 基于 MusicBox 修改开发，并保留原项目的 MIT License 和版权声明。
@@ -112,9 +122,7 @@ npm run build:renderer
 
 也感谢所有开源依赖的维护者。Auralux 的桌面体验、音频链路、构建流程和云端集成都建立在这些开源工作的基础上。
 
-### 许可证与声明
-
-Auralux 包含来自 MusicBox 的修改代码，原项目采用 MIT License。完整许可证见 [LICENSE](LICENSE)，项目声明见 [NOTICE.md](NOTICE.md)。
+### 免责声明
 
 Auralux 与网易云音乐没有官方关联。网易云音乐相关功能仅用于用户访问自己的账号数据。用户应自行遵守对应平台服务条款和当地法律法规。
 
@@ -220,6 +228,16 @@ npm run build:renderer
 4. NetEase integration is intended only for accessing the user's own account, playlists, and related data.
 5. This project does not provide music content and does not bypass copyright or platform restrictions.
 
+### License And Commercial Use
+
+Auralux uses a layered licensing model:
+
+- Original MusicBox code remains under the MIT License and keeps the original copyright notice.
+- Auralux-specific modifications, additions, and branding are licensed under the [Auralux Non-Commercial License](AURALUX_LICENSE.md) for personal learning, research, and non-commercial use only.
+- Commercial use, commercial distribution, paid integration, SaaS/hosted services, or closed-source commercial use requires separate written permission from the Auralux author.
+
+Auralux is source-available and should not be described as an entirely MIT-licensed open-source project. See [LICENSE](LICENSE), [NOTICE.md](NOTICE.md), and [AURALUX_LICENSE.md](AURALUX_LICENSE.md).
+
 ### Acknowledgements
 
 Special thanks to [asxez](https://github.com/asxez) for creating and open-sourcing [MusicBox](https://github.com/asxez/MusicBox). Auralux is modified from MusicBox and preserves the original MIT License and copyright notice.
@@ -228,8 +246,6 @@ Thanks to [binaryify](https://github.com/Binaryify) for [NeteaseCloudMusicApi](h
 
 Thanks also to the maintainers of all open-source dependencies used by this project. Auralux's desktop experience, audio path, build pipeline, and cloud integration are built on top of that work.
 
-### License And Notice
-
-Auralux contains modified code from MusicBox, which is licensed under the MIT License. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
+### Disclaimer
 
 Auralux is not affiliated with NetEase Cloud Music. NetEase-related features are intended for users to access their own account data. Users are responsible for complying with the relevant platform terms and applicable laws.
