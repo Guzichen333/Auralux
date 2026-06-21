@@ -8,7 +8,7 @@ import {playlistCoverManifest} from './playlistCoverManifest';
 import type {UINextPlaylistLike} from './playlistCoverTypes';
 
 export const MIN_STARTUP_DISPLAY_MS = 1000;
-export const MAX_STARTUP_WAIT_MS = 5000;
+export const MAX_STARTUP_WAIT_MS = 45000;
 
 export type StartupWarmupStatus = 'pending' | 'running' | 'done' | 'degraded';
 
@@ -32,6 +32,7 @@ type StartupWarmupTaskDefinition = {
     id: string;
     label: string;
     run: () => Promise<string>;
+    critical?: boolean;
 };
 
 function readSettings(): MusicBoxSettings {
@@ -56,6 +57,39 @@ async function preloadStartupPlaylistCovers(): Promise<string> {
         return `已排队检查封面 ${preload.scheduled} 个`;
     }
     return '歌单封面缓存已就绪';
+}
+
+function waitForNetEaseApiReady(): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const neteaseApi = window.electronAPI?.netease;
+        if (!neteaseApi) {
+            reject(new Error('NetEase API startup channel is unavailable'));
+            return;
+        }
+
+        let settled = false;
+        let unsubscribeReady: (() => void) | undefined;
+        let unsubscribeUnavailable: (() => void) | undefined;
+
+        const cleanup = () => {
+            unsubscribeReady?.();
+            unsubscribeUnavailable?.();
+        };
+
+        unsubscribeReady = neteaseApi.onApiReady((data) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve(data.endpoint);
+        });
+
+        unsubscribeUnavailable = neteaseApi.onApiUnavailable((data) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error(data.error || `NetEase API startup failed: ${data.endpoint}`));
+        });
+    });
 }
 
 function createTaskDefinitions(): StartupWarmupTaskDefinition[] {
@@ -90,8 +124,11 @@ function createTaskDefinitions(): StartupWarmupTaskDefinition[] {
         },
         {
             id: 'neteaseAvailability',
+            critical: true,
             label: '连接网易云 API',
             run: async () => {
+                const endpoint = await waitForNetEaseApiReady();
+                netEaseApiClient.setApiEndpoint(endpoint);
                 const available = await netEaseApiClient.checkAvailability();
                 if (!available) {
                     throw new Error('网易云 API 暂不可用，本地功能继续');
@@ -103,6 +140,8 @@ function createTaskDefinitions(): StartupWarmupTaskDefinition[] {
             id: 'neteaseProfile',
             label: '同步网易云账号',
             run: async () => {
+                const endpoint = await waitForNetEaseApiReady();
+                netEaseApiClient.setApiEndpoint(endpoint);
                 const profile = await netEaseAuthService.getAccountProfile();
                 return profile?.nickname ? `账号 ${profile.nickname}` : '未登录网易云';
             }
@@ -147,14 +186,14 @@ function cloneTasks(tasks: StartupWarmupTaskState[]): StartupWarmupTaskState[] {
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | 'timeout'> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const timer = window.setTimeout(() => resolve('timeout'), timeoutMs);
         promise.then((value) => {
             window.clearTimeout(timer);
             resolve(value);
         }).catch((error) => {
             window.clearTimeout(timer);
-            throw error;
+            reject(error);
         });
     });
 }
@@ -162,6 +201,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | 'ti
 export async function runStartupWarmup(onUpdate: StartupWarmupUpdate = () => {}): Promise<StartupWarmupResult> {
     const startedAt = performance.now();
     const definitions = createTaskDefinitions();
+    const criticalTaskIds = new Set(['neteaseAvailability']);
     const tasks: StartupWarmupTaskState[] = definitions.map((task) => ({
         id: task.id,
         label: task.label,
@@ -173,7 +213,7 @@ export async function runStartupWarmup(onUpdate: StartupWarmupUpdate = () => {})
     const update = () => onUpdate(cloneTasks(tasks));
     update();
 
-    const work = Promise.allSettled(definitions.map(async (definition, index) => {
+    const work = Promise.all(definitions.map(async (definition, index) => {
         tasks[index].status = 'running';
         tasks[index].message = '正在处理';
         update();
@@ -183,6 +223,9 @@ export async function runStartupWarmup(onUpdate: StartupWarmupUpdate = () => {})
             tasks[index].status = 'done';
             tasks[index].message = message;
         } catch (error) {
+            if (definition.critical || criticalTaskIds.has(definition.id)) {
+                throw error;
+            }
             tasks[index].status = 'degraded';
             tasks[index].message = error instanceof Error ? error.message : '已降级';
             degraded.push(definition.id);
@@ -193,6 +236,9 @@ export async function runStartupWarmup(onUpdate: StartupWarmupUpdate = () => {})
     const timed = await withTimeout(work, MAX_STARTUP_WAIT_MS);
     const timedOut = timed === 'timeout';
     if (timedOut) {
+        if (tasks.some((task) => task.id === 'neteaseAvailability' && (task.status === 'pending' || task.status === 'running'))) {
+            throw new Error('Startup critical task timed out: neteaseAvailability');
+        }
         tasks.forEach((task) => {
             if (task.status === 'pending' || task.status === 'running') {
                 task.status = 'degraded';

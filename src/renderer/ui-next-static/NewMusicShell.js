@@ -89,6 +89,7 @@
         autoplay: false,
         rememberPosition: false,
         desktopLyrics: true,
+        playerTheme: 'default',
         systemTray: true,
         trayCloseBehavior: 'exit',
         trayStartMinimized: false
@@ -100,8 +101,10 @@
       immersiveLyricsMode: 'standard',
       immersiveVisualizerStyle: 'classic',
       immersiveBackground: { type: 'cover', src: '' },
+      immersiveSonicTheme: { id: 'nocturnal', name: 'Nocturnal' },
       immersiveCachedVideos: [],
       immersiveBackgroundFilter: 'video',
+      immersiveBackgroundPanelMode: 'regular',
       immersiveStylePanelOpen: false,
       immersiveCacheEditPath: '',
       immersiveCacheEditName: '',
@@ -130,6 +133,15 @@
     this._immersiveLastSpectrum = [];
     this._immersiveLastSpectrumAt = 0;
     this._immersiveLastBarHeights = [];
+    this._sonicTerrainFrame = 0;
+    this._sonicTerrainLastUpdate = 0;
+    this._sonicTerrainSpectrum = [];
+    this._sonicTerrainEnergy = { bass: 0, mid: 0, air: 0, total: 0 };
+    this._immersiveSonicBackgroundFrame = 0;
+    this._immersiveSonicBackgroundLastUpdate = 0;
+    this._immersiveSonicBackgroundSpectrum = [];
+    this._immersiveSonicScene = null;
+    this._immersiveSonicCanvas = null;
     this._immersiveLastActive = -1;
     this._immersiveRenderActive = null;
     this._immersiveLastMode = '';
@@ -401,6 +413,17 @@
     }
   };
 
+  NewMusicShell.prototype.onAddToQueue = function (track) {
+    if (this.adapter && typeof this.adapter.addToQueue === 'function') {
+      this.adapter.addToQueue(track);
+      return;
+    }
+    if (!track) return;
+    this.state.queue.tracks.push(clone(track));
+    if (this.state.queue.currentIndex < 0) this.state.queue.currentIndex = 0;
+    this.render();
+  };
+
   NewMusicShell.prototype.onToggleLike = function (track) {
     if (this.adapter && typeof this.adapter.toggleLike === 'function') {
       this.adapter.toggleLike(track);
@@ -428,6 +451,7 @@
     this._recordImmersiveEntryProbe('onOpenImmersivePlayer', null);
     this._resetImmersiveVisualizerState();
     this._pushHistory('immersive-player', null);
+    this.state.immersiveBackgroundPanelMode = 'regular';
     if (this.adapter && typeof this.adapter.openImmersivePlayer === 'function') {
       this.adapter.openImmersivePlayer();
       return;
@@ -436,6 +460,7 @@
     this.state.view = 'immersive-player';
     this.state.activePlaylistId = null;
     this.state.queueOpen = false;
+    this.state.immersiveBackgroundPanelMode = 'regular';
     this.render();
   };
 
@@ -510,6 +535,41 @@
   NewMusicShell.prototype.onCloseQueue = function () {
     this.state.queueOpen = false;
     this.render();
+  };
+
+  NewMusicShell.prototype._renderQueuePanel = function () {
+    var self = this;
+    var s = this.state;
+    if (!QueuePanel) return null;
+
+    return QueuePanel({
+      queue: s.queue,
+      onSelect: function (i) {
+        if (self.adapter && typeof self.adapter.playQueueIndex === 'function') return self.adapter.playQueueIndex(i);
+        s.queue.currentIndex = i;
+        s.currentTrack = clone(s.queue.tracks[i]);
+        s.duration = s.currentTrack.duration || 0;
+        s.position = 0;
+        s.isPlaying = true;
+        self._ensureTicking();
+        self.render();
+      },
+      onRemove: function (i) {
+        if (self.adapter && typeof self.adapter.removeQueueIndex === 'function') return self.adapter.removeQueueIndex(i);
+        if (s.queue.tracks.length <= 1) return;
+        s.queue.tracks.splice(i, 1);
+        if (i <= s.queue.currentIndex) s.queue.currentIndex = Math.max(0, s.queue.currentIndex - 1);
+        self.render();
+      },
+      onClear: function () {
+        if (self.adapter && typeof self.adapter.clearQueue === 'function') return self.adapter.clearQueue();
+        var cur = s.queue.tracks[s.queue.currentIndex];
+        s.queue.tracks = cur ? [clone(cur)] : [];
+        s.queue.currentIndex = 0;
+        self.render();
+      },
+      onClose: function () { self.onCloseQueue(); }
+    });
   };
 
   NewMusicShell.prototype._setCurrent = function (track) {
@@ -1022,9 +1082,11 @@
 
     if (s.view === 'immersive-player') {
       var immersiveDialog = s.confirmDialog ? this._renderConfirmDialog(s.confirmDialog) : null;
+      var immersiveQueue = s.queueOpen ? this._renderQueuePanel() : null;
       var preservedVideo = this._detachReusableImmersiveVideo();
       clear(this.root, [
         this._renderImmersivePlayer(),
+        immersiveQueue,
         immersiveDialog
       ]);
       this._restoreReusableImmersiveVideo(preservedVideo);
@@ -1032,12 +1094,18 @@
       this._searchInput = null;
       this._focusImmersiveCacheEditInput();
       this._scheduleImmersiveProgressUpdate();
+      this._ensureImmersiveSonicBackgroundLoop();
       return;
     }
 
     if (this._immersiveSmoothFrame) {
       cancelAnimationFrame(this._immersiveSmoothFrame);
       this._immersiveSmoothFrame = 0;
+    }
+    this._destroyImmersiveSonicScene();
+    if (this._immersiveSonicBackgroundFrame) {
+      cancelAnimationFrame(this._immersiveSonicBackgroundFrame);
+      this._immersiveSonicBackgroundFrame = 0;
     }
 
     var preservedNetEaseMenu = this._detachReusableNetEaseMenu();
@@ -1102,7 +1170,7 @@
       },
       onFocus: function () { s.searchFocused = true; self.render(); },
       onSelectTrack: function (t) { self.onPlayTrack(t); },
-      onAddToPlaylist: function (t) { self.onAddToPlaylist(t); },
+      onAddToQueue: function (t) { self.onAddToQueue(t); },
       onToggleLike: function (t) { self.onToggleLike(t); },
       onOpenPlaylist: function (id) { self.onOpenPlaylist(id); },
       onSelectFilter: function (filter) { self.onSearchFilter(filter); },
@@ -1163,6 +1231,7 @@
       volume: s.volume,
       muted: s.muted,
       playMode: s.playMode,
+      playerTheme: s.settings && s.settings.playerTheme,
       queueCount: s.queue.tracks.length,
       queueOpen: s.queueOpen,
       playbackCacheState: s.playbackCacheState || null,
@@ -1196,34 +1265,7 @@
       onOpenImmersivePlayer: function (e) { self._openImmersiveFromPlayerCover(e); }
     });
 
-    var queue = s.queueOpen ? QueuePanel({
-      queue: s.queue,
-      onSelect: function (i) {
-        if (self.adapter && typeof self.adapter.playQueueIndex === 'function') return self.adapter.playQueueIndex(i);
-        s.queue.currentIndex = i;
-        s.currentTrack = clone(s.queue.tracks[i]);
-        s.duration = s.currentTrack.duration || 0;
-        s.position = 0;
-        s.isPlaying = true;
-        self._ensureTicking();
-        self.render();
-      },
-      onRemove: function (i) {
-        if (self.adapter && typeof self.adapter.removeQueueIndex === 'function') return self.adapter.removeQueueIndex(i);
-        if (s.queue.tracks.length <= 1) return;
-        s.queue.tracks.splice(i, 1);
-        if (i <= s.queue.currentIndex) s.queue.currentIndex = Math.max(0, s.queue.currentIndex - 1);
-        self.render();
-      },
-      onClear: function () {
-        if (self.adapter && typeof self.adapter.clearQueue === 'function') return self.adapter.clearQueue();
-        var cur = s.queue.tracks[s.queue.currentIndex];
-        s.queue.tracks = cur ? [clone(cur)] : [];
-        s.queue.currentIndex = 0;
-        self.render();
-      },
-      onClose: function () { self.onCloseQueue(); }
-    }) : null;
+    var queue = s.queueOpen ? this._renderQueuePanel() : null;
 
     var playlistContextMenu = s.playlistContextMenu && s.playlistContextMenu.open
       ? this._renderPlaylistContextMenu(s.playlistContextMenu)
@@ -1248,6 +1290,122 @@
       this._searchInput.focus();
       try { this._searchInput.setSelectionRange(v.length, v.length); } catch (_) {}
     }
+    this._ensureSonicTerrainLoop();
+  };
+
+  NewMusicShell.prototype._ensureSonicTerrainLoop = function () {
+    var self = this;
+    if (this._sonicTerrainFrame) return;
+
+    function step(now) {
+      var player = self.root && self.root.querySelector('.mb-player--sonic-topography');
+      var tiles = player ? player.querySelectorAll('.mb-player__sonic-tile') : [];
+      if (!player || !tiles.length) {
+        self._sonicTerrainFrame = 0;
+        return;
+      }
+
+      if (!self.state.isPlaying && !self._sonicTerrainSpectrum.length) {
+        self._sonicTerrainFrame = 0;
+        return;
+      }
+
+      if (now - self._sonicTerrainLastUpdate >= 66) {
+        self._sonicTerrainLastUpdate = now;
+        self._updateSonicTerrain(player, tiles, now);
+      }
+
+      self._sonicTerrainFrame = requestAnimationFrame(step);
+    }
+
+    this._sonicTerrainFrame = requestAnimationFrame(step);
+  };
+
+  NewMusicShell.prototype._updateSonicTerrain = function (player, tiles, now) {
+    var sonicTerrainTiles = Math.max(32, Math.min(96, tiles.length));
+    var rawSpectrum = this.adapter && typeof this.adapter.getFrequencySpectrum === 'function'
+      ? this.adapter.getFrequencySpectrum(sonicTerrainTiles)
+      : [];
+    var spectrum = this._stabilizeSonicTerrainSpectrum(rawSpectrum, sonicTerrainTiles);
+    var bands = this._deriveSonicTerrainBands(spectrum);
+    var elapsed = (now || performance.now()) * 0.001;
+
+    player.style.setProperty('--sonic-energy', bands.total.toFixed(3));
+    player.style.setProperty('--sonic-bass', bands.bass.toFixed(3));
+    player.style.setProperty('--sonic-mid', bands.mid.toFixed(3));
+    player.style.setProperty('--sonic-air', bands.air.toFixed(3));
+
+    for (var i = 0; i < tiles.length; i++) {
+      var tile = tiles[i];
+      var region = tile.getAttribute('data-sonic-region') || 'mid';
+      var index = Number(tile.getAttribute('data-sonic-index')) || i;
+      var x = Number(tile.style.getPropertyValue('--sonic-x')) || 0;
+      var y = Number(tile.style.getPropertyValue('--sonic-y')) || 0;
+      var distance = Number(tile.style.getPropertyValue('--sonic-distance')) || 0;
+      var seed = Number(tile.style.getPropertyValue('--sonic-seed')) || 0;
+      var mapped = spectrum.length ? spectrum[index % spectrum.length] || 0 : 0;
+      var band = region === 'bass' ? bands.bass : (region === 'air' ? bands.air : bands.mid);
+      var wave = Math.sin(elapsed * (1.1 + seed) + x * 0.31 + y * 0.72) * 0.5 + 0.5;
+      var centerFalloff = Math.max(0, 1 - distance * 0.68);
+      var height = Math.min(1, 0.05 + wave * 0.10 + mapped * 0.45 + band * (0.62 + centerFalloff * 0.55));
+      var glow = Math.min(1, mapped * 0.62 + band * 0.78 + centerFalloff * bands.total * 0.34);
+
+      tile.style.setProperty('--sonic-height', height.toFixed(3));
+      tile.style.setProperty('--sonic-glow', glow.toFixed(3));
+    }
+  };
+
+  NewMusicShell.prototype._stabilizeSonicTerrainSpectrum = function (rawSpectrum, count) {
+    if (Array.isArray(rawSpectrum) && rawSpectrum.length) {
+      this._sonicTerrainSpectrum = rawSpectrum.slice(0, count);
+      return this._sonicTerrainSpectrum;
+    }
+
+    var last = this._sonicTerrainSpectrum || [];
+    if (!last.length) return [];
+
+    this._sonicTerrainSpectrum = last.map(function (value) {
+      return Math.max(0, value * 0.90);
+    }).filter(function (value) {
+      return value > 0.012;
+    });
+    return this._sonicTerrainSpectrum.slice(0, count);
+  };
+
+  NewMusicShell.prototype._deriveSonicTerrainBands = function (spectrum) {
+    if (!spectrum.length) {
+      this._sonicTerrainEnergy.bass *= 0.88;
+      this._sonicTerrainEnergy.mid *= 0.88;
+      this._sonicTerrainEnergy.air *= 0.88;
+      this._sonicTerrainEnergy.total *= 0.88;
+      return this._sonicTerrainEnergy;
+    }
+
+    var bass = 0;
+    var mid = 0;
+    var air = 0;
+    var total = 0;
+    for (var i = 0; i < spectrum.length; i++) {
+      var value = Math.max(0, Math.min(1, Number(spectrum[i]) || 0));
+      total += value;
+      if (i < spectrum.length * 0.22) bass += value;
+      else if (i < spectrum.length * 0.68) mid += value;
+      else air += value;
+    }
+
+    var next = {
+      bass: bass / Math.max(1, Math.floor(spectrum.length * 0.22)),
+      mid: mid / Math.max(1, Math.floor(spectrum.length * 0.46)),
+      air: air / Math.max(1, spectrum.length - Math.floor(spectrum.length * 0.68)),
+      total: total / spectrum.length
+    };
+    var previous = this._sonicTerrainEnergy;
+    var alpha = 0.34;
+    previous.bass += (next.bass - previous.bass) * alpha;
+    previous.mid += (next.mid - previous.mid) * alpha;
+    previous.air += (next.air - previous.air) * alpha;
+    previous.total += (next.total - previous.total) * alpha;
+    return previous;
   };
 
   NewMusicShell.prototype._detachReusableImmersiveVideo = function () {
@@ -1407,7 +1565,7 @@
         onToggleOfflineFilter: function () { self.toggleOfflinePlayableFilter(); },
         onPlayTrack: function (t) { self.onPlayTrack(t); },
         onToggleLike: function (t) { self.onToggleLike(t); },
-        onAddToPlaylist: function (t) { self.onAddToPlaylist(t); },
+        onAddToQueue: function (t) { self.onAddToQueue(t); },
         onDeleteTrackFile: function (t) { self.onDeleteTrackFile(t); },
         onCorrectLocalMatch: function (t) { self.onCorrectLocalMatch(t); }
       });
@@ -1496,7 +1654,7 @@
       isPlaying: this.state.isPlaying,
       onPlayTrack: function (t) { self.onPlayTrack(t); },
       onToggleLike: function (t) { self.onToggleLike(t); },
-      onAddToPlaylist: function (t) { self.onAddToPlaylist(t); },
+      onAddToQueue: function (t) { self.onAddToQueue(t); },
       onOpenPlaylist: function (id) { self.onOpenPlaylist(id); },
       onDeleteTrackFile: function (t) { self.onDeleteTrackFile(t); }
     });
@@ -1527,9 +1685,13 @@
       background: s.immersiveBackground || { type: 'cover', src: '' },
       cachedVideos: s.immersiveCachedVideos || [],
       backgroundFilter: s.immersiveBackgroundFilter || ((s.immersiveBackground && s.immersiveBackground.type === 'image') ? 'image' : 'video'),
+      backgroundPanelMode: s.immersiveBackgroundPanelMode || 'regular',
       stylePanelOpen: Boolean(s.immersiveStylePanelOpen),
       cacheEditPath: s.immersiveCacheEditPath || '',
       cacheEditName: s.immersiveCacheEditName || '',
+      queueCount: s.queue.tracks.length,
+      queueOpen: s.queueOpen,
+      sonicThemeName: (s.immersiveSonicTheme && s.immersiveSonicTheme.name) || 'Nocturnal',
       onBack: function () { self.goBack(); },
       onToggleStylePanel: function () {
         s.immersiveStylePanelOpen = !s.immersiveStylePanelOpen;
@@ -1552,6 +1714,17 @@
         self._skipNext(); self.render();
       },
       onSeek: function (ratio, dragging) { self.onSeek(ratio, dragging); },
+      onToggleQueue: function () {
+        s.queueOpen = !s.queueOpen;
+        self.render();
+      },
+      onCycleSonicTheme: function () {
+        self._cycleImmersiveSonicTheme();
+      },
+      onBackgroundPanelMode: function (mode) {
+        s.immersiveBackgroundPanelMode = mode === 'sonic' ? 'sonic' : 'regular';
+        self.render();
+      },
       onToggleLike: function (t) { self.onToggleLike(t); },
       onRetryLyrics: function () {
         if (self.adapter && typeof self.adapter.retryCurrentLyrics === 'function') return self.adapter.retryCurrentLyrics();
@@ -1580,10 +1753,20 @@
       },
       onBackgroundImage: function () {
         s.immersiveBackgroundFilter = 'image';
+        s.immersiveBackgroundPanelMode = 'regular';
         self.render();
       },
       onBackgroundVideo: function () {
         s.immersiveBackgroundFilter = 'video';
+        s.immersiveBackgroundPanelMode = 'regular';
+        self.render();
+      },
+      onBackgroundSonicTopography: function () {
+        s.immersiveBackgroundPanelMode = 'sonic';
+        if (self.adapter && typeof self.adapter.useSonicTopographyImmersiveBackground === 'function') {
+          return self.adapter.useSonicTopographyImmersiveBackground();
+        }
+        s.immersiveBackground = { type: 'sonic-topography', src: '' };
         self.render();
       },
       onBackgroundImport: function (kind) {
@@ -1945,6 +2128,10 @@
             h('span', { class: 'mb-settings-panel__title' }, '\u64ad\u653e'),
             h('span', { class: 'mb-settings-panel__hint' }, '\u5e94\u7528\u5230\u5f53\u524d Auralux \u64ad\u653e\u903b\u8f91')
           ]),
+          settingSelect('\u64ad\u653e\u5668\u4e3b\u9898', '\u76f4\u63a5\u642c\u7528 Sonic Topography \u7684\u73bb\u7483\u5361\u7247\u4e0e\u51b7\u84dd\u8fdb\u5ea6\u6837\u5f0f\u3002', settings.playerTheme || 'default', 'playerTheme', [
+            { value: 'default', label: 'Auralux' },
+            { value: 'sonic-topography', label: 'Sonic Topography' }
+          ]),
           settingToggle('\u542f\u52a8\u540e\u81ea\u52a8\u64ad\u653e', '\u6253\u5f00\u8f6f\u4ef6\u540e\u6062\u590d\u64ad\u653e\u72b6\u6001\u65f6\u81ea\u52a8\u7ee7\u7eed\u64ad\u653e\u3002', settings.autoplay, 'autoplay'),
           settingToggle('\u8bb0\u4f4f\u64ad\u653e\u8fdb\u5ea6', '\u91cd\u542f\u540e\u4ece\u4e0a\u6b21\u6b4c\u66f2\u4f4d\u7f6e\u7ee7\u7eed\u3002', settings.rememberPosition, 'rememberPosition'),
           settingToggle('\u663e\u793a\u5c01\u9762', '\u5728\u97f3\u4e50\u5e93\u5217\u8868\u548c\u6b4c\u5355\u8be6\u60c5\u4e2d\u663e\u793a\u6b4c\u66f2\u5c01\u9762\u3002', settings.showTrackCovers, 'showTrackCovers'),
@@ -2032,10 +2219,8 @@
             h('span', { class: 'mb-settings-panel__title' }, '\u7cfb\u7edf'),
             h('span', { class: 'mb-settings-panel__hint' }, '\u7a97\u53e3\u4e0e\u6545\u969c\u6392\u67e5')
           ]),
-          settingToggle('\u7f51\u7edc\u78c1\u76d8', '\u542f\u7528\u7f51\u7edc\u78c1\u76d8\u96c6\u6210\uff0c\u5e76\u6253\u5f00\u914d\u7f6e\u7a97\u53e3\u3002', settings.networkDriveEnabled, 'networkDriveEnabled'),
           settingToggle('\u786c\u4ef6\u52a0\u901f', '\u4fee\u6539\u540e\u53ef\u80fd\u9700\u8981\u91cd\u542f\u5e94\u7528\u3002', settings.hardwareAcceleration, 'hardwareAcceleration'),
           h('div', { class: 'mb-settings-inline-actions' }, [
-            h('button', { class: 'mb-settings-mini-action', onclick: adapterAction('openNetworkDrive') }, '\u7f51\u7edc\u78c1\u76d8\u914d\u7f6e'),
             h('button', { class: 'mb-settings-mini-action', onclick: adapterAction('openUserDataFolder') }, '\u7528\u6237\u6570\u636e\u6587\u4ef6\u5939'),
             h('button', { class: 'mb-settings-mini-action', onclick: adapterAction('openDevTools') }, '\u5f00\u53d1\u8005\u5de5\u5177')
           ])
@@ -2062,7 +2247,6 @@
           action('\u91cd\u65b0\u6253\u5f00\u8fc1\u79fb\u5411\u5bfc', '\u91cd\u65b0\u663e\u793a\u9996\u6b21\u8fc1\u79fb\u5f15\u5bfc\u548c\u4e0b\u4e00\u6b65\u5165\u53e3', function () {
             self.resetMigrationOnboarding();
           }),
-          action('\u63d2\u4ef6\u7ba1\u7406', '\u6253\u5f00\u5df2\u5b89\u88c5\u7684\u63d2\u4ef6\u548c\u6269\u5c55\u8bbe\u7f6e\u3002', adapterAction('openPluginManager')),
           action('\u68c0\u67e5\u66f4\u65b0', '\u67e5\u770b Auralux \u662f\u5426\u6709\u53ef\u7528\u66f4\u65b0\u3002', adapterAction('checkUpdates')),
           action('\u9879\u76ee\u4ed3\u5e93', '\u5728\u53ef\u7528\u65f6\u6253\u5f00 Auralux \u9879\u76ee\u9875\u9762\u3002', adapterAction('openRepository'))
         ])
@@ -2159,6 +2343,10 @@
       currentTime: this.root.querySelector('[data-role="current-time"]'),
       waveCurrent: this.root.querySelector('[data-role="wave-current"]'),
       wave: this.root.querySelector('[data-role="immersive-wave"]'),
+      sonicCanvas: this.root.querySelector('[data-sonic-topography-canvas]'),
+      sonicLyrics: this.root.querySelector('.mb-immersive__lyrics--sonic'),
+      sonicThemeName: this.root.querySelector('[data-sonic-theme-name]'),
+      sonicThemeNames: this.root.querySelectorAll('[data-sonic-theme-name]'),
       seekFill: this.root.querySelector('.mb-immersive__seek-fill'),
       seekThumb: this.root.querySelector('.mb-immersive__seek-thumb'),
       bars: this.root.querySelectorAll('.mb-immersive__wave-bar'),
@@ -2213,22 +2401,24 @@
 
     var style = this.state.immersiveVisualizerStyle || 'classic';
     var bars = cache.bars;
-    var lastActive = Math.round((bars.length - 1) * ratio);
+    var lastActive = bars.length ? Math.round((bars.length - 1) * ratio) : -1;
     var rawSpectrum = this.adapter && typeof this.adapter.getFrequencySpectrum === 'function'
-      ? this.adapter.getFrequencySpectrum(bars.length)
+      ? (bars.length ? this.adapter.getFrequencySpectrum(bars.length) : [])
       : [];
     var spectrum = this._stabilizeImmersiveSpectrum(rawSpectrum, bars.length, now);
-    if (lastActive !== this._immersiveLastWaveActive || spectrum.length) {
+    if (bars.length && (lastActive !== this._immersiveLastWaveActive || spectrum.length)) {
       this._immersiveLastWaveActive = lastActive;
       var total = 0;
       var bass = 0;
       var mid = 0;
+      var air = 0;
       for (var i = 0; i < bars.length; i++) {
         var value = typeof spectrum[i] === 'number' ? spectrum[i] : 0;
         var normalized = Math.min(1, Math.max(0, value));
         total += normalized;
         if (i < bars.length * 0.22) bass += normalized;
         else if (i < bars.length * 0.68) mid += normalized;
+        else air += normalized;
         var height = this._immersiveVisualizerHeight(style, i, bars.length, normalized, spectrum.length, now);
         height = this._smoothImmersiveBarHeight(i, height, spectrum.length, now);
         bars[i].style.height = height.toFixed(1) + '%';
@@ -2239,10 +2429,12 @@
       var average = bars.length ? total / bars.length : 0;
       var bassAverage = bars.length ? bass / Math.max(1, Math.floor(bars.length * 0.22)) : 0;
       var midAverage = bars.length ? mid / Math.max(1, Math.floor(bars.length * 0.46)) : 0;
+      var airAverage = bars.length ? air / Math.max(1, bars.length - Math.floor(bars.length * 0.68)) : 0;
       if (cache.wave) {
         cache.wave.style.setProperty('--pickup-energy', average.toFixed(3));
         cache.wave.style.setProperty('--pickup-bass', bassAverage.toFixed(3));
         cache.wave.style.setProperty('--pickup-mid', midAverage.toFixed(3));
+        cache.wave.style.setProperty('--pickup-air', airAverage.toFixed(3));
       }
       if (cache.pulseCore) {
         cache.pulseCore.style.transform = 'scaleX(' + (0.42 + Math.min(1, average * 1.8)).toFixed(3) + ')';
@@ -2309,7 +2501,9 @@
       if (activeChanged) {
         node.classList.toggle('is-active', isActive);
         node.classList.toggle('is-dim', lineIndex >= 0 && Math.abs(lineIndex - active) > 3);
-        if (this.state.immersiveLyricsMode === 'standard' && lineIndex >= 0) {
+        if (cache.sonicLyrics && lineIndex >= 0) {
+          this._positionImmersiveSonicLyricNode(node, lineIndex - active);
+        } else if (this.state.immersiveLyricsMode === 'standard' && lineIndex >= 0) {
           this._positionImmersiveLyricNode(node, lineIndex - active);
         } else if (lineIndex >= 0) {
           this._positionImmersiveLyricNodeForMode(node, this.state.immersiveLyricsMode, lineIndex - active);
@@ -2454,6 +2648,158 @@
     return 8 + value * 92;
   };
 
+  NewMusicShell.prototype._ensureImmersiveSonicBackgroundLoop = function () {
+    if (this.state.view !== 'immersive-player') return;
+    var bg = this.state.immersiveBackground || {};
+    var canvas = this._getImmersiveDomCache().sonicCanvas;
+    if (bg.type === 'sonic-topography' && canvas && !this._immersiveSonicScene) {
+      var initialScene = this._ensureImmersiveSonicScene(canvas);
+      if (initialScene) {
+        this._updateImmersiveSonicBackground(initialScene, performance.now());
+      }
+    }
+    if (this._immersiveSonicBackgroundFrame) {
+      if (bg.type === 'sonic-topography' && canvas && !this._immersiveSonicScene) {
+        this._ensureImmersiveSonicScene(canvas);
+      }
+      return;
+    }
+    var self = this;
+
+    function step(now) {
+      if (self.state.view !== 'immersive-player') {
+        self._destroyImmersiveSonicScene();
+        self._immersiveSonicBackgroundFrame = 0;
+        return;
+      }
+
+      var bg = self.state.immersiveBackground || {};
+      var cache = self._getImmersiveDomCache();
+      var canvas = cache.sonicCanvas;
+      if (bg.type !== 'sonic-topography' || !canvas) {
+        self._destroyImmersiveSonicScene();
+        self._immersiveSonicBackgroundFrame = 0;
+        return;
+      }
+
+      var scene = self._ensureImmersiveSonicScene(canvas);
+      if (!scene) {
+        self._immersiveSonicBackgroundFrame = 0;
+        return;
+      }
+
+      if (now - self._immersiveSonicBackgroundLastUpdate >= 33) {
+        self._immersiveSonicBackgroundLastUpdate = now;
+        self._updateImmersiveSonicBackground(scene, now);
+      }
+
+      self._immersiveSonicBackgroundFrame = requestAnimationFrame(step);
+    }
+
+    this._immersiveSonicBackgroundFrame = requestAnimationFrame(step);
+  };
+
+  NewMusicShell.prototype._ensureImmersiveSonicScene = function (canvas) {
+    if (!global.MBSonicTopographyScene) return null;
+    if (this._immersiveSonicScene && this._immersiveSonicCanvas === canvas) {
+      return this._immersiveSonicScene;
+    }
+    this._destroyImmersiveSonicScene();
+    this._immersiveSonicCanvas = canvas;
+    this._immersiveSonicScene = new global.MBSonicTopographyScene(canvas);
+    this._syncImmersiveSonicTheme(this._immersiveSonicScene);
+    return this._immersiveSonicScene;
+  };
+
+  NewMusicShell.prototype._syncImmersiveSonicTheme = function (scene) {
+    if (!scene || typeof scene.setTheme !== 'function' || typeof scene.getTheme !== 'function') return;
+    var theme = this.state.immersiveSonicTheme || { id: 'nocturnal', name: 'Nocturnal' };
+    scene.setTheme(theme.id || 'nocturnal');
+    this.state.immersiveSonicTheme = scene.getTheme();
+    this._updateImmersiveSonicThemeLabel();
+  };
+
+  NewMusicShell.prototype._updateImmersiveSonicThemeLabel = function () {
+    var cache = this._getImmersiveDomCache();
+    var label = (this.state.immersiveSonicTheme && this.state.immersiveSonicTheme.name) || 'Nocturnal';
+    if (cache.sonicThemeNames && cache.sonicThemeNames.length) {
+      cache.sonicThemeNames.forEach(function (node) {
+        if (node.textContent !== label) node.textContent = label;
+      });
+    } else if (cache.sonicThemeName && cache.sonicThemeName.textContent !== label) {
+      cache.sonicThemeName.textContent = label;
+    }
+  };
+
+  NewMusicShell.prototype._cycleImmersiveSonicTheme = function () {
+    var cache = this._getImmersiveDomCache();
+    var scene = this._immersiveSonicScene || (cache.sonicCanvas ? this._ensureImmersiveSonicScene(cache.sonicCanvas) : null);
+    if (scene && typeof scene.nextTheme === 'function' && typeof scene.getTheme === 'function') {
+      this.state.immersiveSonicTheme = scene.nextTheme();
+    } else {
+      var order = ['nocturnal', 'neon-tokyo', 'cyber-forest', 'minimal-monochrome'];
+      var names = {
+        'nocturnal': 'Nocturnal',
+        'neon-tokyo': 'Neon Tokyo',
+        'cyber-forest': 'Cyber Forest',
+        'minimal-monochrome': 'Minimal Monochrome'
+      };
+      var current = (this.state.immersiveSonicTheme && this.state.immersiveSonicTheme.id) || 'nocturnal';
+      var nextTheme = order[(order.indexOf(current) + 1) % order.length];
+      this.state.immersiveSonicTheme = { id: nextTheme, name: names[nextTheme] };
+    }
+    this._updateImmersiveSonicThemeLabel();
+  };
+
+  NewMusicShell.prototype._destroyImmersiveSonicScene = function () {
+    if (this._immersiveSonicBackgroundFrame) {
+      cancelAnimationFrame(this._immersiveSonicBackgroundFrame);
+      this._immersiveSonicBackgroundFrame = 0;
+    }
+    if (this._immersiveSonicScene && typeof this._immersiveSonicScene.dispose === 'function') {
+      this._immersiveSonicScene.dispose();
+    }
+    this._immersiveSonicScene = null;
+    this._immersiveSonicCanvas = null;
+    this._immersiveSonicBackgroundSpectrum = [];
+  };
+
+  NewMusicShell.prototype._updateImmersiveSonicBackground = function (scene, now) {
+    var count = 128;
+    var rawSpectrum = this.adapter && typeof this.adapter.getFrequencySpectrum === 'function'
+      ? this.adapter.getFrequencySpectrum(count)
+      : [];
+    var spectrum = this._stabilizeImmersiveSonicBackgroundSpectrum(rawSpectrum, count, now);
+    scene.updateAudioData(spectrum, Boolean(this.state.isPlaying));
+    scene.render();
+  };
+
+  NewMusicShell.prototype._stabilizeImmersiveSonicBackgroundSpectrum = function (rawSpectrum, count, now) {
+    if (Array.isArray(rawSpectrum) && rawSpectrum.length) {
+      var last = this._immersiveSonicBackgroundSpectrum || [];
+      this._immersiveSonicBackgroundSpectrum = rawSpectrum.slice(0, count).map(function (value, index) {
+        var normalized = Math.max(0, Math.min(1, Number(value) || 0));
+        var previous = typeof last[index] === 'number' ? last[index] : normalized;
+        return previous + (normalized - previous) * 0.36;
+      });
+      return this._immersiveSonicBackgroundSpectrum;
+    }
+
+    var elapsed = (now || performance.now()) * 0.001;
+    var fallback = this._immersiveSonicBackgroundSpectrum || [];
+    if (!fallback.length) {
+      fallback = Array.from({ length: count }, function (_, index) {
+        return 0.04 + (Math.sin(elapsed * 0.8 + index * 0.31) * 0.5 + 0.5) * 0.05;
+      });
+    } else {
+      fallback = fallback.map(function (value) {
+        return Math.max(0, value * 0.92);
+      });
+    }
+    this._immersiveSonicBackgroundSpectrum = fallback.slice(0, count);
+    return this._immersiveSonicBackgroundSpectrum;
+  };
+
   NewMusicShell.prototype._positionImmersiveLyricNodeForMode = function (node, mode, slot) {
     if (mode === 'wrap') {
       this._positionImmersiveWrapLyricNode(node, slot);
@@ -2514,6 +2860,15 @@
     node.style.setProperty('--rail-scale', (slot === 0 ? 1 : Math.max(0.72, 0.9 - distance * 0.06)).toFixed(3));
     node.style.opacity = (slot === 0 ? 1 : Math.max(0.2, 0.72 - distance * 0.15)).toFixed(3);
     node.style.zIndex = String(20 - distance);
+  };
+
+  NewMusicShell.prototype._positionImmersiveSonicLyricNode = function (node, slot) {
+    var distance = Math.min(Math.abs(slot), 7);
+    node.style.setProperty('--sonic-lyric-y', (50 + slot * 11) + '%');
+    node.style.setProperty('--sonic-lyric-z', (-Math.abs(slot) * 18) + 'px');
+    node.style.setProperty('--sonic-lyric-scale', (slot === 0 ? 1.08 : Math.max(0.72, 0.94 - distance * 0.045)).toFixed(3));
+    node.style.opacity = (slot === 0 ? 1 : Math.max(0.16, 0.62 - distance * 0.075)).toFixed(3);
+    node.style.zIndex = String(30 - distance);
   };
 
   NewMusicShell.prototype._refreshImmersiveLyricsWindow = function (active) {

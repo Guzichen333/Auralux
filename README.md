@@ -126,6 +126,10 @@ Auralux 是 source-available 项目，不应被描述为整体 MIT 开源项目�
 
 Auralux 与网易云音乐没有官方关联。网易云音乐相关功能仅用于用户访问自己的账号数据。用户应自行遵守对应平台服务条款和当地法律法规。
 
+### Sonic Topography 来源声明
+
+Auralux 的声波地形沉浸背景参考并致谢 [yin-yizhen/sonic-topography](https://github.com/yin-yizhen/sonic-topography)。截至本次检查，该仓库未发现显式 LICENSE 文件，`package.json` 也没有 `license` 字段。Auralux 在此仅做来源披露和致谢，不声明该原仓库采用 MIT 或其它开源许可证。
+
 ---
 
 ## English
@@ -243,6 +247,8 @@ Auralux is source-available and should not be described as an entirely MIT-licen
 Special thanks to [asxez](https://github.com/asxez) for creating and open-sourcing [MusicBox](https://github.com/asxez/MusicBox). Auralux is modified from MusicBox and preserves the original MIT License and copyright notice.
 
 Thanks to [binaryify](https://github.com/Binaryify) for [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi), which Auralux uses as part of its local NetEase Cloud Music API service.
+
+Thanks to [yin-yizhen](https://github.com/yin-yizhen) for [Sonic Topography](https://github.com/yin-yizhen/sonic-topography), which inspired the attributed Sonic Topography immersive background in Auralux. At the time of review, that repository did not include an explicit license file or package-level license field; Auralux therefore documents it as an attributed source and does not describe it as MIT-licensed or otherwise open-source licensed.
 
 Thanks also to the maintainers of all open-source dependencies used by this project. Auralux's desktop experience, audio path, build pipeline, and cloud integration are built on top of that work.
 

@@ -25,11 +25,11 @@ Recent history uses lowercase prefixes such as `feature:`, `refactor:`, and `doc
 Do not bypass the preload boundary with direct renderer access to Node APIs. Reuse existing main-process utilities such as `src/main/utils/pathSecurity.ts` for filesystem-facing work, and keep native or Python changes isolated to their build paths.
 
 <!-- gitnexus:start -->
-# GitNexus 鈥?Code Intelligence
+# GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **MusicBox** (13459 symbols, 40565 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Auralux** (17820 symbols, 47542 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
-> Index stale? Run `node .gitnexus/run.cjs analyze` from the project root 鈥?it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash 鈫?`npm i -g gitnexus`; #1939).
+> Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
 ## Always Do
 
@@ -37,23 +37,23 @@ This project is indexed by GitNexus as **MusicBox** (13459 symbols, 40565 relati
 - **MUST run `detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows. For regression review, compare against the default branch: `detect_changes({scope: "compare", base_ref: "dev"})`.
 - **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
 - When exploring unfamiliar code, use `query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol 鈥?callers, callees, which execution flows it participates in 鈥?use `context({name: "symbolName"})`.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `context({name: "symbolName"})`.
 
 ## Never Do
 
 - NEVER edit a function, class, or method without first running `impact` on it.
 - NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
-- NEVER rename symbols with find-and-replace 鈥?use `rename` which understands the call graph.
+- NEVER rename symbols with find-and-replace — use `rename` which understands the call graph.
 - NEVER commit changes without running `detect_changes()` to check affected scope.
 
 ## Resources
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/MusicBox/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/MusicBox/clusters` | All functional areas |
-| `gitnexus://repo/MusicBox/processes` | All execution flows |
-| `gitnexus://repo/MusicBox/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/Auralux/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/Auralux/clusters` | All functional areas |
+| `gitnexus://repo/Auralux/processes` | All execution flows |
+| `gitnexus://repo/Auralux/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 

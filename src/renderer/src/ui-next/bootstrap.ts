@@ -29,10 +29,12 @@ import '../../ui-next-static/components/SearchResultsView';
 import '../../ui-next-static/components/QueuePanel';
 import '../../ui-next-static/components/PlayerBar';
 import '../../ui-next-static/components/ImmersivePlayerView';
+import '../../ui-next-static/sonicTopographyScene';
 import '../../ui-next-static/NewMusicShell';
 
 const STARTUP_SHELL_WAIT_MS = 1200;
 const STARTUP_EXIT_GRACE_MS = 500;
+let startupLocalModeRequested = false;
 
 declare global {
     interface Window {
@@ -187,13 +189,9 @@ function clearStartupSplash(root: HTMLElement): void {
 }
 
 function waitForStartupExit(startedAt: number, warmup: Promise<unknown>): Promise<void> {
-    const maxElapsed = MAX_STARTUP_WAIT_MS + STARTUP_EXIT_GRACE_MS;
-    const remaining = Math.max(0, maxElapsed - (performance.now() - startedAt));
-
-    return Promise.race([
-        Promise.all([warmup, waitForStartupGate(startedAt)]).then(() => undefined),
-        new Promise<void>((resolve) => window.setTimeout(resolve, remaining))
-    ]);
+    void MAX_STARTUP_WAIT_MS;
+    void STARTUP_EXIT_GRACE_MS;
+    return Promise.all([warmup, waitForStartupGate(startedAt)]).then(() => undefined);
 }
 
 function escapeHtml(value: string): string {
@@ -344,18 +342,25 @@ function createNewMusicShellUnavailableError(): Error {
     return new Error(`NewMusicShell is not available after ui-next modules loaded (${describeUINextGlobals()}).`);
 }
 
-function renderStartupError(error: unknown): void {
+function renderStartupError(error: unknown, onEnterLocalMode: () => void): void {
     const root = ensureRoot();
     const message = error instanceof Error ? error.message : String(error);
     root.innerHTML = [
-        '<div style="padding:32px;font:14px/1.5 system-ui;color:#d54b62">',
+        '<div class="mb-startup-error">',
+        '<button class="mb-startup-error__skip" type="button" data-startup-enter-local>进入本地模式</button>',
+        '<div class="mb-startup-error__body">',
+        '<div class="mb-startup-error__title">Auralux 启动受阻</div>',
+        '<div class="mb-startup-error__message">',
         'Auralux 启动失败：',
         message,
+        '</div>',
+        '</div>',
         '</div>'
     ].join('');
+    root.querySelector<HTMLButtonElement>('[data-startup-enter-local]')?.addEventListener('click', onEnterLocalMode);
 }
 
-async function mountUINext(): Promise<void> {
+async function mountUINext(options: {skipStartupWarmup?: boolean} = {}): Promise<void> {
     await loadStylesheet(assetUrl('styles.css'));
     const startupStartedAt = performance.now();
 
@@ -370,7 +375,9 @@ async function mountUINext(): Promise<void> {
     hideLegacyApp();
     const root = ensureRoot();
     renderStartupSplash(root);
-    const warmup = runStartupWarmup((tasks) => renderStartupSplash(root, tasks));
+    const warmup = options.skipStartupWarmup
+        ? Promise.resolve()
+        : runStartupWarmup((tasks) => renderStartupSplash(root, tasks));
     const shellReady = await waitForNewMusicShell();
     await waitForStartupExit(startupStartedAt, warmup);
     // Startup splash should never block the app shell indefinitely.
@@ -409,10 +416,21 @@ async function mountUINext(): Promise<void> {
     window.__newShellNetEase = netEase;
 }
 
+function enterLocalModeFromStartupError(): void {
+    if (startupLocalModeRequested) {
+        return;
+    }
+    startupLocalModeRequested = true;
+    void mountUINext({skipStartupWarmup: true}).catch((error) => {
+        console.error('[ui-next] local mode bootstrap failed', error);
+        renderStartupError(error, enterLocalModeFromStartupError);
+    });
+}
+
 if (shouldEnableUINext()) {
     mountUINext().catch((error) => {
         console.error('[ui-next] bootstrap failed', error);
-        renderStartupError(error);
+        renderStartupError(error, enterLocalModeFromStartupError);
     });
 }
 

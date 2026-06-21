@@ -290,7 +290,7 @@ Put reusable media fixtures in `test-files/`. Run `cd src/renderer && npm run li
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **MusicBox** (13459 symbols, 40565 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **Auralux** (17820 symbols, 47542 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
@@ -313,10 +313,10 @@ This project is indexed by GitNexus as **MusicBox** (13459 symbols, 40565 relati
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/MusicBox/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/MusicBox/clusters` | All functional areas |
-| `gitnexus://repo/MusicBox/processes` | All execution flows |
-| `gitnexus://repo/MusicBox/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/Auralux/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/Auralux/clusters` | All functional areas |
+| `gitnexus://repo/Auralux/processes` | All execution flows |
+| `gitnexus://repo/Auralux/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 

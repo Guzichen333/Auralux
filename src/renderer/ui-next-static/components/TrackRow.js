@@ -75,12 +75,12 @@
       h('div', { class: 'mb-track-row__duration numeric' }, fmt(t.duration)),
       h('div', { class: 'mb-track-row__src' }, [
         SourceBadge(t.source),
-        opts.onAddToPlaylist ? h('button', {
+        opts.onAddToQueue ? h('button', {
           class: 'mb-track-row__action mb-track-row__add',
-          title: '\u6dfb\u52a0\u5230\u6b4c\u5355',
+          title: '\u6dfb\u52a0\u5230\u64ad\u653e\u961f\u5217',
           onclick: function (e) {
             e.stopPropagation();
-            opts.onAddToPlaylist(t);
+            opts.onAddToQueue(t);
           }
         }, iconEl(MBIcons.plus(16))) : null,
         opts.onToggleLike ? h('button', {

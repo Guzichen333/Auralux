@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "dayjs": "^1.11.7",
-    "fuse.js": "^6.6.2"
+    "fuse.js": "^6.6.2",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@vitejs/plugin-legacy": "^8.0.1",

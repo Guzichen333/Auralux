@@ -73,6 +73,7 @@ export interface ElectronBenchmarkAPI {
 }
 
 export interface ElectronNetEaseAPI {
+    getApiStatus(): {state: 'ready'; data: {endpoint: string}} | {state: 'unavailable'; data: {endpoint: string; error?: string}} | null;
     onApiReady(callback: (data: {endpoint: string}) => void): Unsubscribe;
     onApiUnavailable(callback: (data: {endpoint: string; error?: string}) => void): Unsubscribe;
 }

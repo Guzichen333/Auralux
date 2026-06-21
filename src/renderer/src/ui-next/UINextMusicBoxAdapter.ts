@@ -38,7 +38,7 @@ type UINextSource = 'local' | 'netease';
 type UINextSearchFilter = 'all' | 'songs' | 'artists' | 'albums' | 'playlists';
 type UINextImmersiveLyricsMode = 'standard' | 'wrap' | 'fragments' | 'rail';
 type UINextImmersiveVisualizerStyle = 'classic' | 'energy' | 'pulse' | 'orbit';
-type UINextImmersiveBackgroundType = 'cover' | 'image' | 'video';
+type UINextImmersiveBackgroundType = 'cover' | 'image' | 'video' | 'sonic-topography';
 type UINextImmersiveVideoQuality = 'smooth' | 'quality' | 'original';
 
 const IMMERSIVE_VIDEO_CACHE_PRESETS: Record<Exclude<UINextImmersiveVideoQuality, 'original'>, string> = {
@@ -179,6 +179,7 @@ interface UINextNetEaseAccountCenterState {
 type UINextSettingsKey =
     | 'autoplay'
     | 'rememberPosition'
+    | 'playerTheme'
     | 'desktopLyrics'
     | 'showTrackCovers'
     | 'gaplessPlayback'
@@ -205,6 +206,7 @@ type UINextSettingsKey =
 interface UINextSettingsState {
     autoplay: boolean;
     rememberPosition: boolean;
+    playerTheme: string;
     desktopLyrics: boolean;
     showTrackCovers: boolean;
     gaplessPlayback: boolean;
@@ -294,6 +296,7 @@ interface UINextShellState {
     immersiveLyricsError?: string;
     immersiveLyricsMode?: UINextImmersiveLyricsMode;
     immersiveVisualizerStyle?: UINextImmersiveVisualizerStyle;
+    immersiveBackgroundPanelMode?: 'regular' | 'sonic';
     immersiveBackground?: {
         type: UINextImmersiveBackgroundType;
         src?: string;
@@ -395,10 +398,12 @@ export class UINextMusicBoxAdapter {
             void this.requestLibrarySnapshotRefresh();
         });
 
-        window.electronAPI?.netease?.onApiReady(() => {
+        window.electronAPI?.netease?.onApiReady((data) => {
+            netEaseApiClient.setApiEndpoint(data.endpoint);
             void this.syncNetEaseStatus(0, {force: true});
         });
-        window.electronAPI?.netease?.onApiUnavailable(() => {
+        window.electronAPI?.netease?.onApiUnavailable((data) => {
+            netEaseApiClient.setApiEndpoint(data.endpoint);
             this.handleNetEaseApiUnavailable();
         });
         window.addEventListener('netease-login-status-changed', () => {
@@ -567,6 +572,34 @@ export class UINextMusicBoxAdapter {
         void playbackController.setPlaylist([currentTrack], 0);
     }
 
+    addToQueue(track: UINextTrack): void {
+        const original = this.resolveOriginalTrack(track);
+        if (!original?.filePath && !original?.path) {
+            showToast('无法添加到播放队列，歌曲路径缺失', 'error', 2200);
+            return;
+        }
+
+        const queue = playbackController.getPlaylist();
+        const currentIndex = playbackController.getCurrentIndex();
+        const nextQueue = queue.concat([original]);
+        const nextIndex = currentIndex >= 0 && currentIndex < queue.length
+            ? currentIndex
+            : (nextQueue.length ? 0 : -1);
+
+        void playbackController.setPlaylist(nextQueue, nextIndex)
+            .then((success) => {
+                if (!success) {
+                    showToast('添加到播放队列失败', 'error', 2200);
+                    return;
+                }
+                showToast(`已添加到播放队列：${original.title || track.title || '歌曲'}`, 'success', 1800);
+            })
+            .catch((error) => {
+                console.error('[ui-next] addToQueue failed', error);
+                showToast('添加到播放队列失败', 'error', 2200);
+            });
+    }
+
     togglePlayMode(): void {
         playbackController.togglePlayMode();
         this.syncPlaybackState();
@@ -724,11 +757,12 @@ export class UINextMusicBoxAdapter {
     }
 
     openImmersivePlayer(_fromHistory = false): void {
-        this.loadImmersiveSettingsSnapshot();
+        this.loadImmersiveSettingsSnapshot({resetSonicBackground: true});
         this.shell.state.view = 'immersive-player';
         this.shell.state.activePlaylistId = null;
         this.shell.state.searchFocused = false;
         this.shell.state.queueOpen = false;
+        this.shell.state.immersiveBackgroundPanelMode = 'regular';
         this.shell.render();
         void this.loadCurrentLyrics();
         void this.loadImmersiveCachedVideos();
@@ -757,8 +791,23 @@ export class UINextMusicBoxAdapter {
     useCoverImmersiveBackground(): void {
         this.updateImmersiveSettings({
             backgroundType: 'cover',
-            backgroundSrc: ''
+            backgroundSrc: '',
+            backgroundOriginalSrc: '',
+            backgroundOptimizedSrc: '',
+            backgroundOptimizedPreset: ''
         });
+    }
+
+    useSonicTopographyImmersiveBackground(): void {
+        this.immersiveBackgroundErrorShown = false;
+        this.updateImmersiveSettings({
+            backgroundType: 'sonic-topography',
+            backgroundSrc: '',
+            backgroundOriginalSrc: '',
+            backgroundOptimizedSrc: '',
+            backgroundOptimizedPreset: ''
+        });
+        showToast('\u5df2\u5207\u6362\u58f0\u573a\u5730\u5f62\u80cc\u666f', 'success', 1600);
     }
 
     async chooseImmersiveBackground(kind: 'image' | 'video'): Promise<void> {
@@ -2231,6 +2280,7 @@ export class UINextMusicBoxAdapter {
         return {
             autoplay: typeof settings.autoplay === 'boolean' ? settings.autoplay : false,
             rememberPosition: typeof settings.rememberPosition === 'boolean' ? settings.rememberPosition : false,
+            playerTheme: settings.playerTheme === 'sonic-topography' ? 'sonic-topography' : 'default',
             desktopLyrics: typeof settings.desktopLyrics === 'boolean' ? settings.desktopLyrics : true,
             showTrackCovers: typeof settings.showTrackCovers === 'boolean' ? settings.showTrackCovers : true,
             gaplessPlayback: typeof settings.gaplessPlayback === 'boolean' ? settings.gaplessPlayback : false,
@@ -2341,19 +2391,32 @@ export class UINextMusicBoxAdapter {
         };
     }
 
-    private loadImmersiveSettingsSnapshot(): void {
+    private loadImmersiveSettingsSnapshot(options: {resetSonicBackground?: boolean} = {}): void {
         const settings = this.readImmersiveSettings();
+        const entryBackgroundType = options.resetSonicBackground && settings.backgroundType === 'sonic-topography'
+            ? 'cover'
+            : settings.backgroundType;
+        const entrySettings = entryBackgroundType === settings.backgroundType
+            ? settings
+            : {
+                ...settings,
+                backgroundType: entryBackgroundType,
+                backgroundSrc: '',
+                backgroundOriginalSrc: '',
+                backgroundOptimizedSrc: '',
+                backgroundOptimizedPreset: ''
+            };
         this.shell.state.immersiveLyricsMode = settings.lyricsMode;
         this.shell.state.immersiveVisualizerStyle = settings.visualizerStyle;
         this.shell.state.immersiveBackground = {
-            type: settings.backgroundType,
-            src: this.resolveImmersiveBackgroundSrc(settings),
-            originalSrc: settings.backgroundOriginalSrc || '',
-            status: settings.backgroundType === 'video' && (settings.backgroundOptimizedSrc || settings.backgroundQuality === 'original') ? 'optimized' : 'idle',
-            statusText: settings.backgroundType === 'video'
-                ? (settings.backgroundQuality === 'original' ? '\u539f\u7247\u76f4\u51fa' : (settings.backgroundOptimizedSrc ? '\u6b63\u5728\u4f7f\u7528\u7f13\u5b58' : ''))
+            type: entrySettings.backgroundType,
+            src: this.resolveImmersiveBackgroundSrc(entrySettings),
+            originalSrc: entrySettings.backgroundOriginalSrc || '',
+            status: entrySettings.backgroundType === 'video' && (entrySettings.backgroundOptimizedSrc || entrySettings.backgroundQuality === 'original') ? 'optimized' : 'idle',
+            statusText: entrySettings.backgroundType === 'video'
+                ? (entrySettings.backgroundQuality === 'original' ? '\u539f\u7247\u76f4\u51fa' : (entrySettings.backgroundOptimizedSrc ? '\u6b63\u5728\u4f7f\u7528\u7f13\u5b58' : ''))
                 : '',
-            quality: settings.backgroundQuality
+            quality: entrySettings.backgroundQuality
         };
     }
 
@@ -2366,7 +2429,9 @@ export class UINextMusicBoxAdapter {
             || value?.lyricsMode === 'standard'
             ? value.lyricsMode
             : 'standard';
-        const backgroundType = value?.backgroundType === 'image' || value?.backgroundType === 'video'
+        const backgroundType = value?.backgroundType === 'image'
+            || value?.backgroundType === 'video'
+            || value?.backgroundType === 'sonic-topography'
             ? value.backgroundType
             : 'cover';
         const visualizerStyle = value?.visualizerStyle === 'energy'

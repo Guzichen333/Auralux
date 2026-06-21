@@ -75,11 +75,13 @@ export class PlaybackPersistence {
     }
 
     saveCurrentPlaybackState(): void {
-        if (!this.isRememberPositionEnabled()) {
-            return;
-        }
-
         try {
+            this.saveQueueSnapshot();
+
+            if (!this.isRememberPositionEnabled()) {
+                return;
+            }
+
             const playbackState = this.createPlaybackState();
 
             console.log('💾 API: 保存播放状态:', {
@@ -93,7 +95,6 @@ export class PlaybackPersistence {
             });
 
             cacheManager.setLocalCache(PLAYBACK_STATE_CACHE_KEY, playbackState);
-            this.saveQueueSnapshot();
             console.log('✅ API: 播放状态已保存（包含播放列表）');
         } catch (error) {
             console.error('❌ API: 保存播放状态失败:', error);

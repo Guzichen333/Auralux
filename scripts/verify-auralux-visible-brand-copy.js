@@ -32,6 +32,24 @@ const checks = [
         required: [
             {pattern: /Auralux 启动失败/, label: 'startup error should use Auralux product name'}
         ]
+    },
+    {
+        file: 'src/main/core/Application.ts',
+        forbidden: [],
+        required: [
+            {pattern: /app\.setName\('Auralux'\)/, label: 'Electron app name should be fixed to Auralux'},
+            {pattern: /app\.setAppUserModelId\('io\.github\.auralux\.app'\)/, label: 'Windows AppUserModelId should use Auralux app id'}
+        ]
+    },
+    {
+        file: 'src/main/core/WindowManager.ts',
+        forbidden: [
+            {pattern: /MusicBox Benchmark/, label: 'benchmark window should not use MusicBox name'}
+        ],
+        required: [
+            {pattern: /title:\s*'Auralux'/, label: 'main BrowserWindow title should be Auralux'},
+            {pattern: /Auralux Benchmark/, label: 'benchmark window should use Auralux name'}
+        ]
     }
 ];
 

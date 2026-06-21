@@ -141,6 +141,7 @@ export class WindowManager {
             height: mainBounds.height,
             minWidth: Math.min(windowConfig.minWidth || 1080, mainBounds.width),
             minHeight: Math.min(windowConfig.minHeight || 720, mainBounds.height),
+            title: 'Auralux',
             titleBarStyle: 'hidden',
             frame: false,
             show: false,
@@ -166,7 +167,7 @@ export class WindowManager {
 
         if (this.isBenchmarkMode()) {
             console.log('📊 Benchmark模式 - Loading minimal benchmark page');
-            await this.mainWindow.loadURL('data:text/html;charset=utf-8,<html><body>MusicBox Benchmark</body></html>');
+            await this.mainWindow.loadURL('data:text/html;charset=utf-8,<html><body>Auralux Benchmark</body></html>');
         } else {
         const isDev = !app.isPackaged;
         let htmlPath: string;

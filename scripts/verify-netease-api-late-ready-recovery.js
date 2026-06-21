@@ -32,8 +32,8 @@ function methodBody(source, name) {
 }
 
 const constructorBody = methodBody(adapter, 'constructor');
-const apiReadyHandler = /onApiReady\(\(\) => \{[\s\S]*?syncNetEaseStatus\(0,\s*\{force:\s*true\}\)/.test(constructorBody);
-const apiUnavailableHandler = /onApiUnavailable\(\(\) => \{[\s\S]*?handleNetEaseApiUnavailable\(\)/.test(constructorBody);
+const apiReadyHandler = /onApiReady\(\([^)]*\) => \{[\s\S]*?syncNetEaseStatus\(0,\s*\{force:\s*true\}\)/.test(constructorBody);
+const apiUnavailableHandler = /onApiUnavailable\(\([^)]*\) => \{[\s\S]*?handleNetEaseApiUnavailable\(\)/.test(constructorBody);
 
 expect(/private netEaseStatusRefreshSession = 0;/.test(adapter), 'adapter tracks NetEase status refresh sessions');
 expect(/private netEaseUnavailableRecoveryTimer = 0;/.test(adapter), 'adapter tracks delayed unavailable recovery');

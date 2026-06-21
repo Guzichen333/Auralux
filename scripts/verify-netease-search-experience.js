@@ -38,14 +38,14 @@ assertContains(topSearch, 'mb-search__history', 'TopSearch must render search hi
 assertContains(topSearch, /onSelectFilter/, 'TopSearch filter buttons must call onSelectFilter.');
 assertContains(topSearch, /onSelectSuggestion/, 'TopSearch suggestions must call onSelectSuggestion.');
 assertContains(topSearch, /onSelectHistory/, 'TopSearch history items must call onSelectHistory.');
-assertContains(topSearch, /onAddToPlaylist/, 'TopSearch result rows must expose add-to-playlist action.');
+assertContains(topSearch, /onAddToQueue/, 'TopSearch result rows must expose add-to-queue action.');
 assertContains(topSearch, /onToggleLike/, 'TopSearch result rows must expose favorite action.');
 assertContains(topSearch, /SourceBadge/, 'TopSearch must keep local/NetEase source badges.');
 
 assertContains(resultsView, 'searchFilter', 'SearchResultsView must receive active filter.');
 assertContains(resultsView, 'filterResults', 'SearchResultsView must apply filters.');
 assertContains(resultsView, 'entityGroup', 'SearchResultsView must render artist/album/playlist result groups.');
-assertContains(resultsView, 'onAddToPlaylist', 'SearchResultsView must keep add-to-playlist actions.');
+assertContains(resultsView, 'onAddToQueue', 'SearchResultsView must keep add-to-queue actions.');
 assertContains(resultsView, 'onToggleLike', 'SearchResultsView must keep favorite actions.');
 assertContains(resultsView, 'onPlayTrack', 'SearchResultsView must keep direct play actions.');
 assertContains(resultsView, 'SourceBadge', 'SearchResultsView must keep source badges.');

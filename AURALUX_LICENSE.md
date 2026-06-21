@@ -10,6 +10,12 @@ Original code from MusicBox by asxez remains licensed under the MIT License. The
 
 Third-party dependencies remain under their own licenses.
 
+Sonic Topography visual work is attributed in `NOTICE.md` to
+`https://github.com/yin-yizhen/sonic-topography`. At the time of review, that
+repository did not include an explicit license file or package-level license
+field. This Auralux license does not grant additional rights to that upstream
+material beyond rights held by its original author.
+
 ## Permission
 
 You may use, copy, study, modify, and share the Auralux-specific materials for personal, educational, research, and other non-commercial purposes.

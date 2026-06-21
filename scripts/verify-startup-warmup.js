@@ -11,7 +11,7 @@ const files = {
 
 const checks = [
     [files.coordinator, /MIN_STARTUP_DISPLAY_MS\s*=\s*1000/],
-    [files.coordinator, /MAX_STARTUP_WAIT_MS\s*=\s*(4|5|6)000/],
+    [files.coordinator, /MAX_STARTUP_WAIT_MS\s*=\s*45000/],
     [files.coordinator, /settings/],
     [files.coordinator, /library/],
     [files.coordinator, /playbackQueue/],
@@ -20,7 +20,7 @@ const checks = [
     [files.coordinator, /coverCache/],
     [files.coordinator, /lyricsCache/],
     [files.coordinator, /degraded/],
-    [files.coordinator, /Promise\.allSettled/],
+    [files.coordinator, /Promise\.all\(definitions\.map/],
     [files.coordinator, /\[ui-next\] startup warmup/],
     [files.bootstrap, /renderStartupSplash/],
     [files.bootstrap, /runStartupWarmup/],

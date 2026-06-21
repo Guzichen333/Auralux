@@ -35,5 +35,14 @@ Third-party components:
   License: MIT
   Auralux uses this package as a local API service for the NetEase integration.
 
+- Sonic Topography by yin-yizhen
+  Repository: https://github.com/yin-yizhen/sonic-topography
+  License: no explicit license file or package license field was found at the
+  time of review.
+  Auralux's Sonic Topography immersive background is an attributed adaptation
+  inspired by this repository. This notice is an attribution and source
+  disclosure, not a claim that the original repository is MIT-licensed or
+  otherwise open-source licensed.
+
 Auralux is not affiliated with NetEase Cloud Music. Users are responsible for
 using their own accounts and complying with applicable service terms.

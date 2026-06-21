@@ -85,7 +85,7 @@
         isPlaying: o.isPlaying && o.currentTrackId === t.id,
         onPlay: o.onPlayTrack,
         onToggleLike: o.onToggleLike,
-        onAddToPlaylist: o.onAddToPlaylist,
+        onAddToQueue: o.onAddToQueue,
         onDeleteTrackFile: o.onDeleteTrackFile,
         onCorrectLocalMatch: o.onCorrectLocalMatch
       });

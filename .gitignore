@@ -3,13 +3,11 @@ node_modules/
 
 # Build outputs
 dist/
-build/pyinstaller/
+release-test/
 native/target/
+build/pyinstaller/
 test-files/
-.gitnexus/
-*.log
-MusicBox-real-machine-test-*.zip
-netease-cloud-music.zip
+scripts/benchmarks/audio/
 
 # IDE files
 .vscode/
@@ -21,7 +19,10 @@ output/
 
 .claude
 .codex
+.gitnexus/
 dosdel.bat
+*.log
+*.zip
 *.docx
 *.doc
 README - 副本.md

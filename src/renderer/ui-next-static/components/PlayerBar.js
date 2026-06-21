@@ -96,6 +96,12 @@
     var t = o.currentTrack;
     var duration = t ? t.duration : 0;
     var progressRatio = duration > 0 ? clamp(o.position / duration, 0, 1) : 0;
+    var playerTheme = o.playerTheme === 'sonic-topography' ? 'sonic-topography' : 'default';
+    var sourceLabel = t
+      ? (t.sourceStatusLabel || (t.source === 'netease' ? '\u7f51\u6613\u4e91' : '\u672c\u5730\u97f3\u9891'))
+      : '\u672c\u5730\u97f3\u9891';
+    var themeLabel = playerTheme === 'sonic-topography' ? 'Sonic Topography' : 'Auralux';
+    var terrain = playerTheme === 'sonic-topography' ? renderSonicTerrain() : null;
 
     // 进度条
     var progress = slider({
@@ -149,6 +155,11 @@
           SourceBadge(t.source)
         ]),
         h('div', { class: 'mb-player__artist ellipsis' }, t.artist),
+        h('div', { class: 'mb-player__source-line' }, [
+          h('span', {}, sourceLabel),
+          h('span', { class: 'mb-player__theme-dot' }, '\u2022'),
+          h('span', {}, themeLabel)
+        ]),
         h('div', { class: 'mb-player__status' }, [
           h('span', { class: 'mb-player__status-chip' }, t.sourceStatusLabel || (t.source === 'netease' ? '\u7f51\u6613\u4e91' : '\u672c\u5730')),
           h('span', { class: 'mb-player__status-chip' }, t.cacheStatusLabel || (o.playbackCacheState && o.playbackCacheState.cacheStatusLabel) || '')
@@ -224,7 +235,50 @@
       ])
     ]);
 
-    return h('footer', { class: 'mb-player' }, [current, center, extras]);
+    return h('footer', {
+      class: 'mb-player' + (playerTheme === 'sonic-topography' ? ' mb-player--sonic-topography' : ''),
+      'data-player-theme': playerTheme
+    }, [terrain, current, center, extras]);
+  }
+
+  function renderSonicTerrain() {
+    var tiles = [];
+    var cols = 28;
+    var rows = 6;
+    var total = cols * rows;
+    var centerX = (cols - 1) / 2;
+    var centerY = (rows - 1) / 2;
+
+    for (var i = 0; i < total; i++) {
+      var x = i % cols;
+      var y = Math.floor(i / cols);
+      var dx = Math.abs(x - centerX) / centerX;
+      var dy = Math.abs(y - centerY) / Math.max(1, centerY);
+      var distance = Math.sqrt(dx * dx + dy * dy);
+      var region = x < cols * 0.24 ? 'bass' : (x < cols * 0.68 ? 'mid' : 'air');
+      var seed = ((x * 17 + y * 31) % 23) / 23;
+      tiles.push(h('span', {
+        class: 'mb-player__sonic-tile',
+        'data-sonic-region': region,
+        'data-sonic-index': String(i),
+        style: {
+          '--sonic-x': String(x),
+          '--sonic-y': String(y),
+          '--sonic-distance': distance.toFixed(3),
+          '--sonic-seed': seed.toFixed(3),
+          '--sonic-height': '0',
+          '--sonic-glow': '0'
+        }
+      }));
+    }
+
+    return h('div', {
+      class: 'mb-player__sonic-terrain',
+      'aria-hidden': 'true',
+      'data-sonic-terrain': 'true'
+    }, [
+      h('div', { class: 'mb-player__sonic-grid' }, tiles)
+    ]);
   }
 
   function iconSpan(svg) { return h('span', { html: svg }); }

@@ -17,6 +17,13 @@ class NetEaseApiClient {
         return this.config.apiEndpoint;
     }
 
+    setApiEndpoint(endpoint: string): void {
+        if (!endpoint) {
+            return;
+        }
+        this.config = {...this.config, apiEndpoint: endpoint};
+    }
+
     get isAuthenticated(): boolean {
         return this.cookie.length > 0;
     }

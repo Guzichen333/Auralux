@@ -215,6 +215,11 @@ export class Application {
         console.log('🔧 应用配置...');
 
         // 硬件加速设置
+        app.setName('Auralux');
+        if (process.platform === 'win32') {
+            app.setAppUserModelId('io.github.auralux.app');
+        }
+
         const hardwareAcceleration = this.configManager.loadHardwareAccelerationSettings();
         const disableHardwareAccelerationForDev = process.env.AURALUX_DISABLE_HARDWARE_ACCELERATION === '1';
         const shouldDisableHardwareAcceleration = !hardwareAcceleration || disableHardwareAccelerationForDev;

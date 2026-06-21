@@ -74,10 +74,12 @@ class NetEaseCloudMusic extends Component {
     }
 
     private setupApiStatusEvents(): void {
-        window.electronAPI?.netease?.onApiReady(() => {
+        window.electronAPI?.netease?.onApiReady((data) => {
+            netEaseApiClient.setApiEndpoint(data.endpoint);
             void this.initLoginStatus();
         });
-        window.electronAPI?.netease?.onApiUnavailable(() => {
+        window.electronAPI?.netease?.onApiUnavailable((data) => {
+            netEaseApiClient.setApiEndpoint(data.endpoint);
             this.isAvailable = false;
             this.isLoggedIn = false;
             this.updateStatusIndicator();

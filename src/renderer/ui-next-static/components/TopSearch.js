@@ -167,7 +167,7 @@
       return nodes;
     }
 
-    return nodes.concat(buildGroups(results, o.selectedIndex, o.onSelectTrack, o.onAddToPlaylist, o.onToggleLike, o.onOpenPlaylist));
+    return nodes.concat(buildGroups(results, o.selectedIndex, o.onSelectTrack, o.onAddToQueue, o.onToggleLike, o.onOpenPlaylist));
   }
 
   function buildFilters(filters, activeFilter, onSelectFilter) {
@@ -202,7 +202,7 @@
     ]);
   }
 
-  function buildGroups(results, selectedIndex, onSelect, onAddToPlaylist, onToggleLike, onOpenPlaylist) {
+  function buildGroups(results, selectedIndex, onSelect, onAddToQueue, onToggleLike, onOpenPlaylist) {
     var runningIndex = 0;
     var nodes = [];
 
@@ -227,9 +227,9 @@
             h('div', { class: 'mb-row__artist ellipsis' }, t.artist + ' / ' + (t.album || ''))
           ]),
           SourceBadge(t.source),
-          actionButton('mb-search-result-row__add', '\u6dfb\u52a0\u5230\u6b4c\u5355', MBIcons.plus(14), function (event) {
+          actionButton('mb-search-result-row__add', '\u6dfb\u52a0\u5230\u64ad\u653e\u961f\u5217', MBIcons.plus(14), function (event) {
             event.stopPropagation();
-            onAddToPlaylist && onAddToPlaylist(t);
+            onAddToQueue && onAddToQueue(t);
           }),
           actionButton('mb-search-result-row__like' + (t.liked ? ' is-liked' : ''), t.liked ? '\u53d6\u6d88\u6536\u85cf' : '\u6536\u85cf', t.liked ? MBIcons.heartFilled(14) : MBIcons.heart(14), function (event) {
             event.stopPropagation();

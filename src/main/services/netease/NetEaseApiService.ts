@@ -1,5 +1,6 @@
 import {ChildProcessWithoutNullStreams, spawn} from 'child_process';
 import * as http from 'http';
+import * as net from 'net';
 
 interface NetEaseApiServiceOptions {
     port?: number;
@@ -8,14 +9,16 @@ interface NetEaseApiServiceOptions {
 }
 
 export class NetEaseApiService {
-    private readonly port: number;
+    private readonly preferredPort: number;
+    private port: number;
     private readonly host: string;
     private readonly startupTimeoutMs: number;
     private process: ChildProcessWithoutNullStreams | null = null;
     private startedByMusicBox = false;
 
     constructor(options: NetEaseApiServiceOptions = {}) {
-        this.port = options.port ?? 3000;
+        this.preferredPort = options.port ?? 3000;
+        this.port = this.preferredPort;
         this.host = options.host ?? '127.0.0.1';
         this.startupTimeoutMs = options.startupTimeoutMs ?? 45000;
     }
@@ -29,7 +32,7 @@ export class NetEaseApiService {
             return await this.isAvailable();
         }
 
-        if (await this.isAvailable()) {
+        if (await this.probeNetEaseApi(this.endpoint)) {
             console.log(`NetEase API already available at ${this.endpoint}`);
             return true;
         }
@@ -40,6 +43,7 @@ export class NetEaseApiService {
             return false;
         }
 
+        this.port = await this.findLaunchPort();
         const nodeExecutable = process.env.MUSICBOX_NETEASE_NODE || this.resolveNodeExecutable();
         const env = {
             ...process.env,
@@ -110,10 +114,71 @@ export class NetEaseApiService {
     }
 
     async isAvailable(): Promise<boolean> {
+        return this.probeNetEaseApi(this.endpoint);
+    }
+
+    private async findLaunchPort(): Promise<number> {
+        for (let offset = 0; offset < 20; offset++) {
+            const candidate = this.preferredPort + offset;
+            const endpoint = `http://${this.host}:${candidate}`;
+            if (await this.probeNetEaseApi(endpoint)) {
+                return candidate;
+            }
+            if (await this.isPortAvailable(candidate)) {
+                return candidate;
+            }
+        }
+
+        return this.preferredPort;
+    }
+
+    private isPortAvailable(port: number): Promise<boolean> {
+        return this.canBindPort(port, this.host)
+            .then((hostAvailable) => hostAvailable ? this.canBindPort(port, '0.0.0.0') : false);
+    }
+
+    private canBindPort(port: number, host: string): Promise<boolean> {
         return new Promise((resolve) => {
-            const request = http.get(this.endpoint, (response) => {
-                response.resume();
-                resolve(Boolean(response.statusCode && response.statusCode >= 200 && response.statusCode < 500));
+            const server = net.createServer();
+            server.once('error', (error: NodeJS.ErrnoException) => {
+                if (error.code === 'EADDRINUSE') {
+                    resolve(false);
+                    return;
+                }
+                resolve(false);
+            });
+            server.once('listening', () => {
+                server.close(() => resolve(true));
+            });
+            server.listen(port, host);
+        });
+    }
+
+    private async probeNetEaseApi(endpoint: string): Promise<boolean> {
+        return new Promise((resolve) => {
+            const url = `${endpoint}/login/qr/key?timestamp=${Date.now()}`;
+            const request = http.get(url, (response) => {
+                let body = '';
+                response.setEncoding('utf8');
+                response.on('data', (chunk: string) => {
+                    body += chunk;
+                    if (body.length > 1024 * 1024) {
+                        request.destroy();
+                        resolve(false);
+                    }
+                });
+                response.on('end', () => {
+                    if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 500) {
+                        resolve(false);
+                        return;
+                    }
+                    try {
+                        const data = JSON.parse(body);
+                        resolve(data?.code === 200 || data?.data?.code === 200);
+                    } catch {
+                        resolve(false);
+                    }
+                });
             });
 
             request.setTimeout(1500, () => {

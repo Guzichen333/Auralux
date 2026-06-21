@@ -27,6 +27,11 @@ assertMatches(persistence, /cacheManager\.setLocalCache\(PLAYBACK_QUEUE_CACHE_KE
 assertMatches(persistence, /const playlist\s*=\s*this\.normalizePlaylist\(state\.playlist\)/, 'normalized playlist state');
 assertMatches(persistence, /currentIndex:\s*this\.normalizeCurrentIndex/, 'normalized current index state');
 assertMatches(persistence, /savedAt:\s*Date\.now\(\)/, 'queue snapshot save time');
+assertMatches(
+  persistence,
+  /saveCurrentPlaybackState\(\):\s*void\s*\{[\s\S]*this\.saveQueueSnapshot\(\)[\s\S]*if\s*\(!this\.isRememberPositionEnabled\(\)\)/,
+  'current song and queue memory must save before remember-position gating'
+);
 
 const appController = read('src/renderer/src/features/playback/ui-bindings/PlaybackAppController.ts');
 assertContains(appController, 'PLAYBACK_QUEUE_CACHE_KEY', 'restore reads queue cache key');

@@ -12,6 +12,20 @@ const FS_ALLOWED = [
     'stat', 'lstat', 'readdir', 'readFile', 'realpath', 'access'
 ];
 const ENABLE_LEGACY_NODE_APIS = process.env.MUSICBOX_ENABLE_LEGACY_NODE_APIS === '1';
+type NetEaseApiReadyPayload = {endpoint: string};
+type NetEaseApiUnavailablePayload = {endpoint: string; error?: string};
+let latestNetEaseApiStatus:
+    | {state: 'ready'; data: NetEaseApiReadyPayload}
+    | {state: 'unavailable'; data: NetEaseApiUnavailablePayload}
+    | null = null;
+
+ipcRenderer.on('netease:api-ready', (_event, data: NetEaseApiReadyPayload) => {
+    latestNetEaseApiStatus = {state: 'ready', data};
+});
+
+ipcRenderer.on('netease:api-unavailable', (_event, data: NetEaseApiUnavailablePayload) => {
+    latestNetEaseApiStatus = {state: 'unavailable', data};
+});
 
 const osApi: Record<string, (...args: any[]) => Promise<any>> = {};
 const pathApi: Record<string, (...args: any[]) => Promise<any>> = {};
@@ -227,13 +241,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     netease: {
-        onApiReady: (callback: (data: {endpoint: string}) => void) => {
-            const wrapper = (_event: any, data: {endpoint: string}) => callback(data);
+        getApiStatus: () => latestNetEaseApiStatus,
+        onApiReady: (callback: (data: NetEaseApiReadyPayload) => void) => {
+            const snapshot = latestNetEaseApiStatus;
+            if (snapshot?.state === 'ready') {
+                queueMicrotask(() => callback(snapshot.data));
+            }
+            const wrapper = (_event: any, data: NetEaseApiReadyPayload) => callback(data);
             ipcRenderer.on('netease:api-ready', wrapper);
             return () => ipcRenderer.removeListener('netease:api-ready', wrapper);
         },
-        onApiUnavailable: (callback: (data: {endpoint: string; error?: string}) => void) => {
-            const wrapper = (_event: any, data: {endpoint: string; error?: string}) => callback(data);
+        onApiUnavailable: (callback: (data: NetEaseApiUnavailablePayload) => void) => {
+            const snapshot = latestNetEaseApiStatus;
+            if (snapshot?.state === 'unavailable') {
+                queueMicrotask(() => callback(snapshot.data));
+            }
+            const wrapper = (_event: any, data: NetEaseApiUnavailablePayload) => callback(data);
             ipcRenderer.on('netease:api-unavailable', wrapper);
             return () => ipcRenderer.removeListener('netease:api-unavailable', wrapper);
         }

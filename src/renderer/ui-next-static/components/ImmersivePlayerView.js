@@ -35,7 +35,7 @@
     var quality = background.quality || 'quality';
 
     var root = h('section', {
-      class: 'mb-immersive mb-immersive--' + mode + ' mb-immersive--quality-' + quality + (background && background.type === 'video' && bgSrc ? ' has-video-bg' : ''),
+      class: 'mb-immersive mb-immersive--' + mode + ' mb-immersive--quality-' + quality + (background && background.type === 'video' && bgSrc ? ' has-video-bg' : '') + (background && background.type === 'sonic-topography' ? ' has-sonic-bg mb-immersive--sonic-theme' : ''),
       'data-lyrics-mode': mode,
       'data-visualizer-style': visualizerStyle
     });
@@ -74,6 +74,11 @@
         h('div', { class: 'mb-empty__title' }, '\u6682\u65e0\u6b63\u5728\u64ad\u653e\u7684\u6b4c\u66f2'),
         h('div', { class: 'mb-empty__desc' }, '\u64ad\u653e\u4efb\u610f\u6b4c\u66f2\u540e\u518d\u8fdb\u5165\u6c89\u6d78\u9875')
       ]));
+      return root;
+    }
+
+    if (background && background.type === 'sonic-topography') {
+      root.appendChild(renderSonicTopographyTheme(o, track, lyrics, activeIndex, ratio, duration));
       return root;
     }
 
@@ -144,9 +149,137 @@
     return root;
   }
 
+  function renderSonicTopographyTheme(o, track, lyrics, activeIndex, ratio, duration) {
+    return h('div', { class: 'mb-immersive__sonic-theme', 'data-sonic-theme': 'true' }, [
+      h('div', { class: 'mb-immersive__sonic-brand' }, [
+        h('span', { class: 'mb-immersive__sonic-brand-main' }, 'AURALUX.'),
+        h('span', { class: 'mb-immersive__sonic-brand-sub' }, 'SONIC TOPOGRAPHY')
+      ]),
+      h('section', { class: 'mb-immersive__sonic-player', 'aria-label': '\u58f0\u573a\u5730\u5f62\u64ad\u653e\u5668' }, [
+        h('div', { class: 'mb-immersive__sonic-player-top' }, [
+          h('div', { class: 'mb-immersive__sonic-demo' }, track.source === 'netease' ? 'NETEASE' : 'LOCAL AUDIO'),
+          h('div', { class: 'mb-immersive__sonic-actions' }, [
+            h('button', {
+              class: 'mb-immersive__sonic-theme-btn',
+              type: 'button',
+              title: '\u5207\u6362\u58f0\u573a\u914d\u8272',
+              onclick: o.onCycleSonicTheme,
+              html: MBIcons.palette(15)
+            }),
+            h('button', {
+              class: 'mb-immersive__sonic-queue' + (o.queueOpen ? ' is-active' : ''),
+              type: 'button',
+              title: '\u64ad\u653e\u961f\u5217',
+              onclick: o.onToggleQueue
+            }, [
+              h('span', { html: MBIcons.queue(15) }),
+              o.queueCount > 0 ? h('span', { class: 'mb-immersive__sonic-queue-badge numeric' }, String(o.queueCount)) : null
+            ]),
+            h('button', {
+              class: 'mb-immersive__sonic-like' + (track.liked ? ' is-active' : ''),
+              title: track.liked ? '\u53d6\u6d88\u559c\u6b22' : '\u559c\u6b22',
+              onclick: function () { o.onToggleLike && o.onToggleLike(track); },
+              html: track.liked ? MBIcons.heartFilled(16) : MBIcons.heart(16)
+            })
+          ])
+        ]),
+        h('div', { class: 'mb-immersive__sonic-track' }, [
+          h('div', { class: 'mb-immersive__sonic-title' }, track.title || '\u672a\u77e5\u6b4c\u66f2'),
+          h('div', { class: 'mb-immersive__sonic-artist' }, track.artist || '\u672a\u77e5\u6b4c\u624b')
+        ]),
+        h('div', { class: 'mb-immersive__sonic-meta' }, [
+          h('span', {}, track.source === 'netease' ? '\u7f51\u6613\u4e91' : '\u672c\u5730\u97f3\u4e50'),
+          h('span', { 'data-sonic-theme-name': 'true' }, o.sonicThemeName || 'Nocturnal')
+        ]),
+        renderSonicSeek(ratio, duration, o.position || 0, o.onSeek),
+        h('div', { class: 'mb-immersive__sonic-controls' }, [
+          h('button', { class: 'mb-immersive__sonic-icon', title: '\u4e0a\u4e00\u9996', onclick: o.onPrev, html: MBIcons.prev(15) }),
+          h('button', {
+            class: 'mb-immersive__sonic-play',
+            title: o.isPlaying ? '\u6682\u505c' : '\u64ad\u653e',
+            onclick: o.onPlayPause,
+            html: o.isPlaying ? MBIcons.pause(18) : MBIcons.play(18)
+          }),
+          h('button', { class: 'mb-immersive__sonic-icon', title: '\u4e0b\u4e00\u9996', onclick: o.onNext, html: MBIcons.next(15) }),
+          h('button', {
+            class: 'mb-immersive__sonic-icon' + (o.playMode !== 'sequence' ? ' is-active' : ''),
+            title: '\u64ad\u653e\u6a21\u5f0f',
+            onclick: o.onCyclePlayMode,
+            html: modeIcon(o.playMode)
+          })
+        ])
+      ]),
+      h('div', { class: 'mb-immersive__sonic-lyrics' }, [
+        renderSonicLyrics(lyrics, activeIndex, o.lyricsLoading, o.lyricsStatus, o.lyricsError, o.onRetryLyrics)
+      ])
+    ]);
+  }
+
+  function renderSonicSeek(ratio, duration, position, onSeek) {
+    var root = h('div', {
+      class: 'mb-immersive__sonic-seek',
+      'data-role': 'immersive-wave',
+      style: {
+        '--seek-ratio': ratio.toFixed(5),
+        '--seek-percent': (ratio * 100).toFixed(2) + '%'
+      }
+    }, [
+      h('div', { class: 'mb-immersive__seek-track mb-immersive__sonic-seek-track', title: '\u64ad\u653e\u65f6\u95f4\u8f74\uff0c\u53ef\u62d6\u52a8\u8df3\u8f6c' }, [
+        h('div', { class: 'mb-immersive__seek-fill' }),
+        h('div', { class: 'mb-immersive__seek-thumb' })
+      ]),
+      h('div', { class: 'mb-immersive__sonic-times' }, [
+        h('span', { class: 'numeric', 'data-role': 'wave-current' }, fmt(position)),
+        h('span', { class: 'numeric', 'data-role': 'wave-duration' }, fmt(duration))
+      ])
+    ]);
+    bindSeek(root, onSeek, ratio);
+    return root;
+  }
+
+  function renderSonicLyrics(lyrics, activeIndex, loading, lyricsStatus, lyricsError, onRetryLyrics) {
+    if (loading) {
+      return h('div', { class: 'mb-immersive__sonic-lyrics-empty' }, '\u6b4c\u8bcd\u52a0\u8f7d\u4e2d...');
+    }
+    if (!lyrics.length) {
+      var message = lyricsStatus === 'error'
+        ? (lyricsError || '\u6b4c\u8bcd\u52a0\u8f7d\u5931\u8d25')
+        : '\u6682\u65e0\u6b4c\u8bcd';
+      return h('div', { class: 'mb-immersive__sonic-lyrics-empty' }, [
+        h('span', {}, message),
+        h('button', {
+          class: 'mb-immersive__lyrics-action',
+          type: 'button',
+          onclick: onRetryLyrics
+        }, '\u91cd\u65b0\u5339\u914d\u6b4c\u8bcd')
+      ]);
+    }
+
+    return h('div', { class: 'mb-immersive__lyrics mb-immersive__lyrics--sonic', 'data-role': 'immersive-lyrics' },
+      lyricWindow(lyrics, activeIndex, 4, 7).map(function (entry) {
+        var slot = entry.index - activeIndex;
+        return lyricLine(entry.line, entry.index, activeIndex, {
+          style: sonicLyricStyle(slot)
+        });
+      }));
+  }
+
+  function sonicLyricStyle(slot) {
+    var distance = Math.min(Math.abs(slot), 7);
+    return {
+      '--sonic-lyric-y': (50 + slot * 11) + '%',
+      '--sonic-lyric-z': (-Math.abs(slot) * 18) + 'px',
+      '--sonic-lyric-scale': (slot === 0 ? 1.08 : Math.max(0.72, 0.94 - distance * 0.045)).toFixed(3),
+      opacity: (slot === 0 ? 1 : Math.max(0.16, 0.62 - distance * 0.075)).toFixed(3),
+      zIndex: String(30 - distance)
+    };
+  }
+
   function renderBackground(background, bgSrc, track) {
     var media = null;
-    if (background && background.type === 'video' && bgSrc) {
+    if (background && background.type === 'sonic-topography') {
+      media = renderSonicTopographyBackground();
+    } else if (background && background.type === 'video' && bgSrc) {
       media = h('video', {
         class: 'mb-immersive__bg-video',
         src: bgSrc,
@@ -171,6 +304,15 @@
       !media && track ? cover(track.cover, 'mb-immersive__bg-fallback') : null,
       h('div', { class: 'mb-immersive__shade' }),
       background && background.type === 'video' ? null : h('div', { class: 'mb-immersive__grain' })
+    ]);
+  }
+
+  function renderSonicTopographyBackground() {
+    return h('div', { class: 'mb-immersive__sonic-bg', 'aria-hidden': 'true' }, [
+      h('canvas', {
+        class: 'mb-immersive__sonic-canvas',
+        'data-sonic-topography-canvas': 'true'
+      })
     ]);
   }
 
@@ -205,6 +347,7 @@
     var status = background.status || 'idle';
     var statusText = background.statusText || '';
     var quality = background.quality || 'quality';
+    var panelMode = o.backgroundPanelMode === 'sonic' ? 'sonic' : 'regular';
     return h('aside', { class: 'mb-immersive__style-panel' }, [
       h('div', { class: 'mb-immersive__style-head' }, [
         h('div', {}, [
@@ -229,21 +372,42 @@
       ]),
       h('div', { class: 'mb-immersive__style-section' }, [
         h('div', { class: 'mb-immersive__style-label' }, '\u80cc\u666f'),
-        renderBackgroundActions(o),
-        status !== 'idle' && statusText ? h('span', {
+        renderBackgroundPanelSwitch(panelMode, o.onBackgroundPanelMode),
+        panelMode === 'regular' ? renderRegularBackgroundActions(o) : renderSonicBackgroundActions(o),
+        panelMode === 'regular' && status !== 'idle' && statusText ? h('span', {
           class: 'mb-immersive__bg-status mb-immersive__bg-status--' + status
         }, statusText) : null,
-        renderCachedVideos(o, background, quality)
+        panelMode === 'regular' ? renderCachedVideos(o, background, quality) : null
       ])
     ]);
   }
 
-  function renderBackgroundActions(o) {
+  function renderBackgroundPanelSwitch(panelMode, onBackgroundPanelMode) {
+    return h('div', { class: 'mb-immersive__bg-tabs', role: 'tablist' }, [
+      h('button', {
+        class: 'mb-immersive__bg-tab' + (panelMode === 'regular' ? ' is-active' : ''),
+        type: 'button',
+        role: 'tab',
+        'aria-selected': panelMode === 'regular' ? 'true' : 'false',
+        onclick: function () { onBackgroundPanelMode && onBackgroundPanelMode('regular'); }
+      }, '\u5e38\u89c4'),
+      h('button', {
+        class: 'mb-immersive__bg-tab' + (panelMode === 'sonic' ? ' is-active' : ''),
+        type: 'button',
+        role: 'tab',
+        'aria-selected': panelMode === 'sonic' ? 'true' : 'false',
+        onclick: function () { onBackgroundPanelMode && onBackgroundPanelMode('sonic'); }
+      }, '\u58f0\u6ce2')
+    ]);
+  }
+
+  function renderRegularBackgroundActions(o) {
     var filter = o.backgroundFilter || 'video';
     var background = o.background || {};
     var importing = Boolean(background.importBusy);
     return h('div', { class: 'mb-immersive__bg-actions' }, [
       h('div', { class: 'mb-immersive__bg-buttons' }, [
+        h('button', { class: 'mb-immersive__style-chip' + (background.type === 'cover' ? ' is-active' : ''), type: 'button', disabled: importing, onclick: o.onBackgroundCover }, '\u5c01\u9762'),
         h('button', { class: 'mb-immersive__style-chip' + (filter === 'image' ? ' is-active' : ''), type: 'button', disabled: importing, onclick: o.onBackgroundImage }, '\u56fe\u7247'),
         h('button', { class: 'mb-immersive__style-chip' + (filter === 'video' ? ' is-active' : ''), type: 'button', disabled: importing, onclick: o.onBackgroundVideo }, '\u89c6\u9891'),
         h('button', {
@@ -258,8 +422,30 @@
             o.onBackgroundImport && o.onBackgroundImport(filter);
           }
         }, importing ? '\u5bfc\u5165\u4e2d' : '\u5bfc\u5165'),
-        h('button', { class: 'mb-immersive__style-chip', type: 'button', disabled: importing, onclick: o.onBackgroundCover }, '\u5c01\u9762'),
         h('button', { class: 'mb-immersive__style-chip', type: 'button', disabled: importing, onclick: o.onBackgroundClear }, '\u6e05\u9664')
+      ])
+    ]);
+  }
+
+  function renderSonicBackgroundActions(o) {
+    var background = o.background || {};
+    var active = background.type === 'sonic-topography';
+    return h('div', { class: 'mb-immersive__bg-actions mb-immersive__bg-actions--sonic' }, [
+      h('div', { class: 'mb-immersive__bg-buttons' }, [
+        h('button', {
+          class: 'mb-immersive__style-chip mb-immersive__style-chip--primary' + (active ? ' is-active' : ''),
+          type: 'button',
+          onclick: o.onBackgroundSonicTopography
+        }, active ? '\u58f0\u573a\u5730\u5f62\u5df2\u542f\u7528' : '\u542f\u7528\u58f0\u573a\u5730\u5f62'),
+        h('button', {
+          class: 'mb-immersive__style-chip mb-immersive__style-chip--palette',
+          type: 'button',
+          title: '\u5207\u6362\u58f0\u6ce2\u914d\u8272',
+          onclick: o.onCycleSonicTheme
+        }, [
+          h('span', { html: MBIcons.palette(14) }),
+          h('span', { 'data-sonic-theme-name': 'true' }, o.sonicThemeName || 'Nocturnal')
+        ])
       ])
     ]);
   }
@@ -724,7 +910,8 @@
         '--seek-percent': (ratio * 100).toFixed(2) + '%',
         '--pickup-energy': '0',
         '--pickup-bass': '0',
-        '--pickup-mid': '0'
+        '--pickup-mid': '0',
+        '--pickup-air': '0'
       }
     }, [
       h('div', { class: 'mb-immersive__wave-bars', title: '\u62fe\u97f3\u5668\uff0c\u53ef\u62d6\u52a8\u8df3\u8f6c' }, [
