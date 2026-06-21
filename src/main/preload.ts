@@ -255,6 +255,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         scanSingleFile: (networkPath: string) => ipcRenderer.invoke('library:scanSingleFile', networkPath),
         scanDirectoryForFiles: (path: string) => ipcRenderer.invoke('library:scanDirectoryForFiles', path),
         addTrackToLibrary: (audioFile: any) => ipcRenderer.invoke('library:addTrackToLibrary', audioFile),
+        bulkImportVirtualTracksToPlaylist: (playlistId: string, tracks: any[]) => ipcRenderer.invoke('library:bulkImportVirtualTracksToPlaylist', playlistId, tracks),
 
         // Get library data
         getTracks: (options: any) => ipcRenderer.invoke('library:getTracks', options),

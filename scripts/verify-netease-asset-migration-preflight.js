@@ -21,8 +21,8 @@ expect(/totalTracks:/.test(service), 'preflight reports total track count');
 expect(/estimatedPlaylists:/.test(service), 'preflight reports estimated playlist count');
 expect(/groups: preview\.groups/.test(service), 'preflight surfaces grouped asset counts');
 expect(/preview,/.test(service), 'preflight carries the resolved preview for migration reuse');
-expect(/async migratePreview\(preview: NetEaseMigrationPreview, onProgress\?: ProgressHandler\): Promise<MigrationSummary>/.test(service), 'service can migrate an already prepared preview');
-expect(/return await this\.migratePreview\(preview, onProgress\)/.test(service), 'migrateAllAssets delegates to prepared-preview migration');
+expect(/async migratePreview\(preview: NetEaseMigrationPreview, onProgress\?: ProgressHandler, control\?: NetEaseMigrationControl\): Promise<MigrationSummary>/.test(service), 'service can migrate an already prepared preview');
+expect(/return await this\.migratePreview\(preview, onProgress, control\)/.test(service), 'migrateAllAssets delegates to prepared-preview migration');
 
 expect(/private pendingAssetMigrationPreview: NetEaseMigrationPreview \| null = null/.test(widget), 'widget stores the pending migration preview');
 expect(/private isAssetMigrationRunning = false/.test(widget), 'widget tracks an in-flight asset migration');

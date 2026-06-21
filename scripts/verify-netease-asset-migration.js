@@ -52,8 +52,9 @@ assertIncludes(service, 'coverImagePath', 'Playlist covers must be written into 
 assertIncludes(service, 'isNew === false', 'Migration must count duplicates/idempotent existing tracks');
 assertIncludes(service, 'createPlaylist', 'Migration must create local target playlists');
 assertIncludes(service, 'updatePlaylistMetadata', 'Migration must tag imported playlists with NetEase metadata');
-assertIncludes(service, 'addTrackToLibrary', 'Migration must register NetEase tracks in the library');
-assertIncludes(service, 'addToPlaylist', 'Migration must add imported tracks to playlists');
+assertIncludes(service, 'bulkImportVirtualTracksToPlaylist', 'Migration must register NetEase tracks through the bulk library import path');
+assertNotIncludes(service, 'libraryController.addTrackToLibrary', 'Migration must not reintroduce per-track addTrackToLibrary writes');
+assertNotIncludes(service, 'libraryController.addToPlaylist', 'Migration must not reintroduce per-track addToPlaylist writes');
 
 assertIncludes(serviceIndex, 'NetEaseAssetMigrationService', 'Service index must export NetEaseAssetMigrationService');
 assertIncludes(types, 'NetEaseMigrationAssetKind', 'Types must define migration asset kinds');

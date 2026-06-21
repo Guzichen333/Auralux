@@ -70,7 +70,7 @@ class NetEaseSyncStateService {
                         retryable: true,
                         conflict
                     });
-                    return this.toSyncResult(false, state.failureReason || 'Conflict detected', state);
+                    return this.toSyncResult(false, state.failureReason || '发现同步冲突', state);
                 }
             }
 
@@ -81,7 +81,7 @@ class NetEaseSyncStateService {
                     externalId,
                     status: 'failed',
                     lastAttemptAt: Date.now(),
-                    failureReason: result.error || 'Sync failed',
+                    failureReason: result.error || '网易云同步失败',
                     retryable: true
                 });
                 return {...result, state};
@@ -103,7 +103,7 @@ class NetEaseSyncStateService {
             });
             return {...result, state};
         } catch (error) {
-            const failureReason = error instanceof Error ? error.message : 'Sync failed';
+            const failureReason = error instanceof Error ? error.message : '网易云同步失败';
             const state = this.saveState({
                 playlistId,
                 externalId,
@@ -124,10 +124,10 @@ class NetEaseSyncStateService {
                 externalId: '',
                 status: 'failed',
                 lastAttemptAt: Date.now(),
-                failureReason: 'Missing NetEase playlist id',
+                failureReason: '缺少网易云歌单 ID',
                 retryable: false
             });
-            return this.toSyncResult(false, missingState.failureReason || 'Missing NetEase playlist id', missingState);
+            return this.toSyncResult(false, missingState.failureReason || '缺少网易云歌单 ID', missingState);
         }
 
         return await this.syncPlaylistWithState(playlistId, state.externalId, {
@@ -204,12 +204,12 @@ class NetEaseSyncStateService {
     private describeConflict(conflict: NetEasePlaylistSyncConflict): string {
         const parts: string[] = [];
         if (conflict.localOnlyTrackCount > 0) {
-            parts.push(`${conflict.localOnlyTrackCount} local-only tracks`);
+            parts.push(`${conflict.localOnlyTrackCount} 首本地歌曲`);
         }
         if (conflict.removedRemoteCount > 0) {
-            parts.push(`${conflict.removedRemoteCount} tracks removed from cloud`);
+            parts.push(`${conflict.removedRemoteCount} 首云端已移除歌曲`);
         }
-        return `Sync conflict: ${parts.join(', ')}. Local tracks are protected.`;
+        return `发现同步冲突：${parts.join('，')}。本地歌曲会保留，请确认后再重试同步。`;
     }
 
     private toSyncResult(success: boolean, error: string, state: NetEasePlaylistSyncState): StatefulSyncResult {

@@ -17,6 +17,7 @@
   function PlaylistView(o) {
     var p = o.playlist;
     var canSync = p.source === 'netease';
+    var cacheSummary = buildCacheSummary(o.tracks || []);
 
     var header = h('div', { class: 'mb-pl-header' }, [
       cover(p.cover, 'mb-pl-header__cover'),
@@ -33,6 +34,11 @@
           h('span', { class: 'numeric' }, totalDuration(o.tracks)),
           h('span', {}, '\u00b7'),
           h('span', {}, p.source === 'netease' ? ('\u66f4\u65b0\u4e8e ' + (p.updatedAt || '-')) : ('\u521b\u5efa\u4e8e ' + (p.updatedAt || '-')))
+        ]),
+        h('div', { class: 'mb-pl-cache-summary' }, [
+          cacheSummaryItem('\u79bb\u7ebf', cacheSummary.offlinePlayable, cacheSummary.total),
+          cacheSummaryItem('\u5c01\u9762', cacheSummary.coverCached, cacheSummary.total),
+          cacheSummaryItem('\u6b4c\u8bcd', cacheSummary.lyricsCached, cacheSummary.total)
         ]),
         h('div', { class: 'mb-pl-header__actions' }, [
           h('button', { class: 'mb-btn mb-btn--primary', onclick: o.onPlayAll }, [
@@ -88,6 +94,28 @@
     return h('div', { class: 'mb-content__inner' }, [
       header,
       h('div', { class: 'mb-tracklist' }, [thead].concat(rows))
+    ]);
+  }
+
+  function buildCacheSummary(tracks) {
+    return tracks.reduce(function (summary, track) {
+      summary.total += 1;
+      if (track.offlinePlayable) summary.offlinePlayable += 1;
+      if (track.coverCacheStatus && track.coverCacheStatus.indexOf('\u5df2\u7f13\u5b58') >= 0) summary.coverCached += 1;
+      if (track.lyricsCacheStatus && track.lyricsCacheStatus.indexOf('\u5df2\u7f13\u5b58') >= 0) summary.lyricsCached += 1;
+      return summary;
+    }, {
+      total: 0,
+      offlinePlayable: 0,
+      coverCached: 0,
+      lyricsCached: 0
+    });
+  }
+
+  function cacheSummaryItem(label, value, total) {
+    return h('span', { class: 'mb-pl-cache-summary__item' }, [
+      h('span', { class: 'mb-pl-cache-summary__label' }, label),
+      h('span', { class: 'mb-pl-cache-summary__value numeric' }, String(value || 0) + '/' + String(total || 0))
     ]);
   }
 

@@ -30,9 +30,9 @@
       head,
       group('\u672c\u5730\u97f3\u4e50', r.local, o),
       group('\u7f51\u6613\u4e91\u97f3\u4e50', r.netease, o),
-      entityGroup('\u6b4c\u624b', entities.artists || []),
-      entityGroup('\u4e13\u8f91', entities.albums || []),
-      entityGroup('\u6b4c\u5355', entities.playlists || [])
+      entityGroup('\u6b4c\u624b', entities.artists || [], o.onOpenPlaylist),
+      entityGroup('\u4e13\u8f91', entities.albums || [], o.onOpenPlaylist),
+      entityGroup('\u6b4c\u5355', entities.playlists || [], o.onOpenPlaylist)
     ]);
   }
 
@@ -90,7 +90,7 @@
     ]);
   }
 
-  function entityGroup(title, list) {
+  function entityGroup(title, list, onOpenPlaylist) {
     if (!list.length) return null;
     return h('section', { class: 'mb-section' }, [
       h('div', { class: 'mb-section__head' }, [
@@ -104,10 +104,24 @@
             h('div', { class: 'mb-row__title ellipsis' }, item.title),
             h('div', { class: 'mb-row__artist ellipsis' }, item.subtitle)
           ]),
-          SourceBadge(item.source)
+          SourceBadge(item.source),
+          item.playlistId ? openEntityButton(item, onOpenPlaylist) : null
         ]);
       }))
     ]);
+  }
+
+  function openEntityButton(item, onOpenPlaylist) {
+    return h('button', {
+      class: 'mb-search-entity__open',
+      type: 'button',
+      title: '\u6253\u5f00',
+      onclick: function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (item.playlistId && onOpenPlaylist) onOpenPlaylist(item.playlistId);
+      }
+    }, '\u6253\u5f00');
   }
 
   function emptyState() {

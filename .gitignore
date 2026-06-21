@@ -9,6 +9,7 @@ test-files/
 .gitnexus/
 *.log
 MusicBox-real-machine-test-*.zip
+netease-cloud-music.zip
 
 # IDE files
 .vscode/

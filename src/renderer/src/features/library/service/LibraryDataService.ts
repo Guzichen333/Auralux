@@ -284,6 +284,16 @@ export class LibraryDataService {
         );
     }
 
+    async bulkImportVirtualTracksToPlaylist(playlistId: string, tracks: Array<Partial<Track>>): Promise<{success: boolean; results?: any[]; error?: string}> {
+        this.assertNonEmptyString(playlistId, 'playlistId');
+
+        return await this.callGateway(
+            () => libraryGateway.bulkImportVirtualTracksToPlaylist(playlistId, tracks),
+            'library.bulkImportVirtualTracksToPlaylist',
+            {success: false, error: '批量迁移网易云歌曲失败'}
+        );
+    }
+
     async getTracksByDrive(driveId: string): Promise<Track[]> {
         this.assertNonEmptyString(driveId, 'driveId');
 

@@ -128,6 +128,7 @@ interface UINextMigrationDashboardState {
         partialCount: number;
         failedCount: number;
         undoneCount: number;
+        cancelledCount: number;
         added: number;
         existing: number;
         skipped: number;
@@ -319,6 +320,7 @@ interface UINextShell {
     };
     state: UINextShellState;
     render(): void;
+    renderNetEaseAccountStatus?(): void;
     recordSearchHistory?(query: string): void;
     _updateProgressOnly?(): void;
     _scheduleImmersiveProgressUpdate?(): void;
@@ -363,6 +365,7 @@ export class UINextMusicBoxAdapter {
     private netEaseUnavailableRecoveryTimer = 0;
     private librarySnapshotPromise: Promise<void> | null = null;
     private librarySnapshotReconcileTimer = 0;
+    private netEaseAssetMigrationInFlight = false;
 
     constructor(shell: UINextShell) {
         this.shell = shell;
@@ -599,7 +602,7 @@ export class UINextMusicBoxAdapter {
     }
 
     retryNetEaseAccountSync(): void {
-        void this.syncNetEaseStatus(0, {force: true});
+        void this.retryRetryableNetEaseSyncs();
     }
 
     refreshNetEaseStatus(): void {
@@ -639,6 +642,59 @@ export class UINextMusicBoxAdapter {
         } finally {
             this.shell.state.syncing = false;
             this.refreshMigrationDashboardState();
+            this.shell.render();
+        }
+    }
+
+    private async retryRetryableNetEaseSyncs(): Promise<void> {
+        const retryableStates = Object.values(netEaseSyncStateService.getAllPlaylistSyncStates())
+            .filter((state) => state.retryable);
+
+        if (!retryableStates.length) {
+            await this.syncNetEaseStatus(0, {force: true});
+            this.refreshMigrationDashboardState();
+            this.refreshNetEaseAccountCenterState();
+            if (typeof this.shell.renderNetEaseAccountStatus === 'function') {
+                this.shell.renderNetEaseAccountStatus();
+            } else {
+                this.shell.render();
+            }
+            showToast('没有需要重试的网易云同步，已刷新账号状态', 'info', 2200);
+            return;
+        }
+
+        this.shell.state.syncing = true;
+        this.shell.render();
+
+        let successCount = 0;
+        let failedCount = 0;
+
+        try {
+            for (const state of retryableStates) {
+                const result = await netEaseSyncStateService.retryPlaylistSync(state.playlistId);
+                if (result.success) {
+                    successCount += 1;
+                } else {
+                    failedCount += 1;
+                }
+            }
+
+            if (successCount > 0) {
+                this.notifyLibraryChanged();
+            }
+
+            const message = failedCount > 0
+                ? `网易云同步重试完成，成功 ${successCount} 个，失败 ${failedCount} 个`
+                : `网易云同步重试完成，成功 ${successCount} 个`;
+            showToast(message, failedCount > 0 ? 'warning' : 'success', 2400);
+            await this.syncNetEaseStatus(0, {force: true});
+        } catch (error) {
+            console.error('[ui-next] retryRetryableNetEaseSyncs failed', error);
+            showToast('网易云同步重试失败', 'error', 2400);
+        } finally {
+            this.shell.state.syncing = false;
+            this.refreshMigrationDashboardState();
+            this.refreshNetEaseAccountCenterState();
             this.shell.render();
         }
     }
@@ -1513,25 +1569,40 @@ export class UINextMusicBoxAdapter {
     }
 
     async migrateAllNetEaseAssets(): Promise<void> {
-        this.shell.state.neteaseAssetMigrationRunning = true;
-        this.shell.render();
+        if (this.netEaseAssetMigrationInFlight) {
+            showToast('迁移正在进行，请等待当前任务完成', 'info', 2200);
+            return;
+        }
+
+        this.netEaseAssetMigrationInFlight = true;
+        this.setNetEaseAssetMigrationRunning(true);
         if (window.__newShellNetEase?.startAssetMigrationFromAccountMenu) {
             try {
                 await window.__newShellNetEase.startAssetMigrationFromAccountMenu();
+                await this.refreshLibrarySnapshotAfterNetEaseMigration();
                 this.refreshMigrationDashboardState();
                 this.refreshNetEaseAccountCenterState();
                 this.openMigrationDashboard();
             } finally {
-                this.shell.state.neteaseAssetMigrationRunning = false;
-                this.shell.render();
+                this.netEaseAssetMigrationInFlight = false;
+                this.setNetEaseAssetMigrationRunning(false);
             }
             return;
         }
 
         this.importNeteasePlaylist();
-        this.shell.state.neteaseAssetMigrationRunning = false;
-        this.shell.render();
+        this.netEaseAssetMigrationInFlight = false;
+        this.setNetEaseAssetMigrationRunning(false);
         showToast('正在打开网易云资产迁移入口', 'info', 2400);
+    }
+
+    showActiveNetEaseMigration(): void {
+        if (window.__newShellNetEase?.showAssetMigrationProgressModal) {
+            window.__newShellNetEase.showAssetMigrationProgressModal();
+            return;
+        }
+
+        showToast('网易云资产迁移正在后台进行，请稍后查看迁移状态', 'info', 2600);
     }
 
     createPlaylist(): void {
@@ -1964,6 +2035,26 @@ export class UINextMusicBoxAdapter {
         this.shell.state.neteaseAccountCenter = this.buildNetEaseAccountCenterState();
     }
 
+    private async refreshLibrarySnapshotAfterNetEaseMigration(): Promise<void> {
+        await this.loadLibrarySnapshot();
+        this.refreshPlaylistDerivedSurfaces();
+        this.shell.render();
+    }
+
+    private setNetEaseAssetMigrationRunning(running: boolean): void {
+        if (this.shell.state.neteaseAssetMigrationRunning === running) {
+            return;
+        }
+
+        this.shell.state.neteaseAssetMigrationRunning = running;
+        if (typeof this.shell.renderNetEaseAccountStatus === 'function') {
+            this.shell.renderNetEaseAccountStatus();
+            return;
+        }
+
+        this.shell.render();
+    }
+
     private buildNetEaseAccountCenterState(): UINextNetEaseAccountCenterState {
         const dashboard = this.shell.state.migrationDashboard || this.buildMigrationDashboardState();
         const reports = dashboard.reports || [];
@@ -2017,6 +2108,7 @@ export class UINextMusicBoxAdapter {
                 partialCount: reports.filter((report) => report.status === 'partial').length,
                 failedCount: reports.filter((report) => report.status === 'failed').length,
                 undoneCount: reports.filter((report) => report.status === 'undone').length,
+                cancelledCount: reports.filter((report) => report.status === 'cancelled').length,
                 added: reports.reduce((total, report) => total + (report.added || 0), 0),
                 existing: reports.reduce((total, report) => total + (report.existing || 0), 0),
                 skipped: reports.reduce((total, report) => total + (report.skipped || 0), 0),
@@ -2054,13 +2146,14 @@ export class UINextMusicBoxAdapter {
         syncStates: NetEasePlaylistSyncState[]
     ): UINextMigrationDiagnosticsState {
         const failedReportCount = reports.filter((report) => report.status === 'failed' || report.failed > 0).length;
+        const cancelledReportCount = reports.filter((report) => report.status === 'cancelled').length;
         const retryableSyncCount = syncStates.filter((state) => state.retryable).length;
         const failedSyncCount = syncStates.filter((state) => state.status === 'failed').length;
         const conflictSyncCount = syncStates.filter((state) => state.status === 'conflict').length;
         const apiStatus = this.shell.state.neteaseStatus === 'offline' ? '不可用' : '可连接';
         const loginStatus = this.shell.state.neteaseSyncStatus || (netEaseAuthService.isAuthenticated ? '登录状态待确认' : '未登录');
         const generatedAtText = new Date().toLocaleString('zh-CN');
-        const reportSummary = `报告 ${reports.length} 个，失败报告 ${failedReportCount} 个`;
+        const reportSummary = `报告 ${reports.length} 个，失败报告 ${failedReportCount} 个，取消报告 ${cancelledReportCount} 个`;
         const syncSummary = `同步状态 ${syncStates.length} 个，可重试同步 ${retryableSyncCount} 个，失败 ${failedSyncCount} 个，冲突 ${conflictSyncCount} 个`;
         const lines = [
             'Auralux 网易云迁移诊断',
@@ -2114,6 +2207,7 @@ export class UINextMusicBoxAdapter {
         if (status === 'partial') return '部分完成';
         if (status === 'failed') return '失败';
         if (status === 'undone') return '已撤销';
+        if (status === 'cancelled') return '已取消';
         return status;
     }
 
@@ -2779,7 +2873,7 @@ export class UINextMusicBoxAdapter {
                         id: key,
                         type: 'artist',
                         title: track.artist,
-                        subtitle: track.source === 'netease' ? 'NetEase artist result' : 'Local artist result',
+                        subtitle: track.source === 'netease' ? '网易云歌手' : '本地歌手',
                         source: track.source,
                         cover: track.cover
                     });
@@ -2808,7 +2902,7 @@ export class UINextMusicBoxAdapter {
                 id: `playlist:${playlist.id}`,
                 type: 'playlist' as const,
                 title: playlist.name,
-                subtitle: `${playlist.trackCount || playlist.trackIds.length} tracks`,
+                subtitle: `${playlist.trackCount || playlist.trackIds.length} 首歌曲`,
                 source: playlist.source,
                 cover: playlist.cover,
                 playlistId: playlist.id

@@ -90,6 +90,10 @@ class LibraryGateway extends ElectronNamespaceAdapter<'library'> {
         return this.call('addTrackToLibrary', audioFile);
     }
 
+    bulkImportVirtualTracksToPlaylist(playlistId: string, tracks: Array<Partial<Track>>): Promise<{success: boolean; results?: any[]; error?: string}> {
+        return this.call('bulkImportVirtualTracksToPlaylist', playlistId, tracks);
+    }
+
     removeTrack(trackFileId: string): Promise<Result> {
         return this.call('removeTrack', trackFileId);
     }

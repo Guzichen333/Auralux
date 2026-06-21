@@ -5,6 +5,7 @@ import {netEaseMigrationReportService, type NetEaseMigrationFailure} from './Net
 import {netEasePlaylistImportService} from './NetEasePlaylistImportService';
 import type {
     NetEaseMigrationAssetKind,
+    NetEaseMigrationControl,
     NetEaseMigrationPreview,
     NetEaseMigrationProgress,
     NetEasePlaylist,
@@ -32,6 +33,7 @@ interface MigrationSummary {
     skippedTracks: number;
     failures: NetEaseMigrationFailure[];
     error?: string;
+    cancelled?: boolean;
 }
 
 interface NetEaseMigrationPreflight {
@@ -73,7 +75,7 @@ class NetEaseAssetMigrationService {
         };
     }
 
-    async migrateAllAssets(onProgress?: ProgressHandler): Promise<MigrationSummary> {
+    async migrateAllAssets(onProgress?: ProgressHandler, control?: NetEaseMigrationControl): Promise<MigrationSummary> {
         const preview = await this.getMigrationPreview();
         if (!preview) {
             return {
@@ -87,7 +89,7 @@ class NetEaseAssetMigrationService {
             };
         }
 
-        return await this.migratePreview(preview, onProgress);
+        return await this.migratePreview(preview, onProgress, control);
     }
 
     async prepareMigrationPreflight(): Promise<NetEaseMigrationPreflight> {
@@ -109,40 +111,65 @@ class NetEaseAssetMigrationService {
         };
     }
 
-    async migratePreview(preview: NetEaseMigrationPreview, onProgress?: ProgressHandler): Promise<MigrationSummary> {
+    async migratePreview(preview: NetEaseMigrationPreview, onProgress?: ProgressHandler, control?: NetEaseMigrationControl): Promise<MigrationSummary> {
         const failures: NetEaseMigrationFailure[] = [];
         let importedPlaylists = 0;
         let importedTracks = 0;
         let existingTracks = 0;
         let skippedTracks = 0;
 
-        const liked = await this.migrateLikedSongs(preview, onProgress);
+        if (this.ensureNotCancelled(control, onProgress)) {
+            return this.cancelledSummary(preview, failures, importedPlaylists, importedTracks, existingTracks, skippedTracks);
+        }
+
+        const liked = await this.migrateLikedSongs(preview, onProgress, control);
         importedPlaylists += liked.playlistId ? 1 : 0;
         importedTracks += liked.added;
         existingTracks += liked.existing;
         skippedTracks += liked.skipped;
         failures.push(...liked.failures);
 
-        const created = await this.migrateUserPlaylists('created-playlists', preview.createdPlaylists, onProgress);
+        if (this.ensureNotCancelled(control, onProgress)) {
+            return this.cancelledSummary(preview, failures, importedPlaylists, importedTracks, existingTracks, skippedTracks);
+        }
+
+        const created = await this.migrateUserPlaylists('created-playlists', preview.createdPlaylists, onProgress, control);
         importedPlaylists += created.importedPlaylists;
         importedTracks += created.importedTracks;
         existingTracks += created.existingTracks;
         skippedTracks += created.skippedTracks;
         failures.push(...created.failures);
 
-        const subscribed = await this.migrateUserPlaylists('subscribed-playlists', preview.subscribedPlaylists, onProgress);
+        if (this.ensureNotCancelled(control, onProgress)) {
+            return this.cancelledSummary(preview, failures, importedPlaylists, importedTracks, existingTracks, skippedTracks);
+        }
+
+        const subscribed = await this.migrateUserPlaylists('subscribed-playlists', preview.subscribedPlaylists, onProgress, control);
         importedPlaylists += subscribed.importedPlaylists;
         importedTracks += subscribed.importedTracks;
         existingTracks += subscribed.existingTracks;
         skippedTracks += subscribed.skippedTracks;
         failures.push(...subscribed.failures);
 
-        const recent = await this.migrateRecentPlays(preview, onProgress);
+        if (this.ensureNotCancelled(control, onProgress)) {
+            return this.cancelledSummary(preview, failures, importedPlaylists, importedTracks, existingTracks, skippedTracks);
+        }
+
+        const recent = await this.migrateRecentPlays(preview, onProgress, control);
         importedPlaylists += recent.playlistId ? 1 : 0;
         importedTracks += recent.added;
         existingTracks += recent.existing;
         skippedTracks += recent.skipped;
         failures.push(...recent.failures);
+
+        onProgress?.({
+            kind: 'recent-plays',
+            label: '网易云资产',
+            current: importedTracks + existingTracks + skippedTracks,
+            total: importedTracks + existingTracks + skippedTracks,
+            message: '网易云资产迁移完成',
+            phase: 'completed'
+        });
 
         return {
             success: failures.length === 0,
@@ -155,7 +182,11 @@ class NetEaseAssetMigrationService {
         };
     }
 
-    async migrateLikedSongs(preview: NetEaseMigrationPreview, onProgress?: ProgressHandler): Promise<PlaylistMigrationStats> {
+    async migrateLikedSongs(
+        preview: NetEaseMigrationPreview,
+        onProgress?: ProgressHandler,
+        control?: NetEaseMigrationControl
+    ): Promise<PlaylistMigrationStats> {
         return await this.importSongsAsPlaylist({
             kind: 'liked-songs',
             label: '我喜欢',
@@ -164,11 +195,16 @@ class NetEaseAssetMigrationService {
             description: '从网易云音乐迁移的我喜欢歌曲',
             cover: preview.likedSongs[0]?.cover || '',
             songs: preview.likedSongs,
-            onProgress
+            onProgress,
+            control
         });
     }
 
-    async migrateRecentPlays(preview: NetEaseMigrationPreview, onProgress?: ProgressHandler): Promise<PlaylistMigrationStats> {
+    async migrateRecentPlays(
+        preview: NetEaseMigrationPreview,
+        onProgress?: ProgressHandler,
+        control?: NetEaseMigrationControl
+    ): Promise<PlaylistMigrationStats> {
         return await this.importSongsAsPlaylist({
             kind: 'recent-plays',
             label: '最近播放',
@@ -177,14 +213,16 @@ class NetEaseAssetMigrationService {
             description: '从网易云音乐迁移的最近播放歌曲',
             cover: preview.recentPlays[0]?.cover || '',
             songs: preview.recentPlays,
-            onProgress
+            onProgress,
+            control
         });
     }
 
     async migrateUserPlaylists(
         kind: Extract<NetEaseMigrationAssetKind, 'created-playlists' | 'subscribed-playlists'>,
         playlists: NetEasePlaylist[],
-        onProgress?: ProgressHandler
+        onProgress?: ProgressHandler,
+        control?: NetEaseMigrationControl
     ): Promise<Omit<MigrationSummary, 'success' | 'preview' | 'error'>> {
         const label = kind === 'created-playlists' ? '创建歌单' : '收藏歌单';
         const failures: NetEaseMigrationFailure[] = [];
@@ -194,13 +232,18 @@ class NetEaseAssetMigrationService {
         let skippedTracks = 0;
 
         for (let i = 0; i < playlists.length; i++) {
+            if (this.ensureNotCancelled(control, onProgress, kind, label)) {
+                break;
+            }
+
             const sourcePlaylist = playlists[i];
             onProgress?.({
                 kind,
                 label,
                 current: i + 1,
                 total: playlists.length,
-                message: `正在迁移${label}：${sourcePlaylist.name}`
+                message: `正在获取${label}：${sourcePlaylist.name}`,
+                phase: 'fetching'
             });
 
             const playlist = sourcePlaylist.tracks?.length
@@ -224,7 +267,8 @@ class NetEaseAssetMigrationService {
                 description: playlist.description || '',
                 cover: playlist.cover,
                 songs: playlist.tracks,
-                onProgress
+                onProgress,
+                control
             });
             importedPlaylists += stats.playlistId ? 1 : 0;
             importedTracks += stats.added;
@@ -289,9 +333,30 @@ class NetEaseAssetMigrationService {
         cover: string;
         songs: NetEaseSong[];
         onProgress?: ProgressHandler;
+        control?: NetEaseMigrationControl;
     }): Promise<PlaylistMigrationStats> {
         const existing = await libraryDataService.getPlaylistByExternalId(input.externalId, 'netease');
         const snapshot = await netEaseMigrationReportService.createSnapshot((existing as any)?.playlist?.id);
+        if (this.ensureNotCancelled(input.control, input.onProgress, input.kind, input.label)) {
+            netEaseMigrationReportService.recordPlaylistImport({
+                externalId: input.externalId,
+                playlistName: input.playlistName,
+                snapshot,
+                total: input.songs.length,
+                added: 0,
+                existing: 0,
+                skipped: input.songs.length,
+                duplicates: 0,
+                failures: [{
+                    songId: input.externalId,
+                    title: input.playlistName,
+                    reason: 'cancelled'
+                }],
+                status: 'cancelled'
+            });
+            return {added: 0, existing: 0, skipped: input.songs.length, duplicates: 0, failures: []};
+        }
+
         const playlistId = await this.ensurePlaylist(input);
         if (!playlistId) {
             const failure = {
@@ -314,55 +379,80 @@ class NetEaseAssetMigrationService {
             return {added: 0, existing: 0, skipped: input.songs.length, duplicates: 0, failures: [failure]};
         }
 
+        if (this.ensureNotCancelled(input.control, input.onProgress, input.kind, input.label)) {
+            netEaseMigrationReportService.recordPlaylistImport({
+                externalId: input.externalId,
+                playlistId,
+                playlistName: input.playlistName,
+                snapshot,
+                total: input.songs.length,
+                added: 0,
+                existing: 0,
+                skipped: input.songs.length,
+                duplicates: 0,
+                failures: [{
+                    songId: input.externalId,
+                    title: input.playlistName,
+                    reason: 'cancelled'
+                }],
+                status: 'cancelled'
+            });
+            return {playlistId, added: 0, existing: 0, skipped: input.songs.length, duplicates: 0, failures: []};
+        }
+
         let added = 0;
         let existingCount = 0;
         let skipped = 0;
         let duplicates = 0;
         const failures: NetEaseMigrationFailure[] = [];
 
-        for (let i = 0; i < input.songs.length; i++) {
-            const song = input.songs[i];
-            input.onProgress?.({
-                kind: input.kind,
-                label: input.label,
-                current: i + 1,
-                total: input.songs.length,
-                message: `正在迁移${input.label}：${song.title}`
-            });
+        input.onProgress?.({
+            kind: input.kind,
+            label: input.label,
+            current: input.songs.length,
+            total: input.songs.length,
+            message: `正在写入${input.label}：${input.songs.length} 首`,
+            phase: 'writing'
+        });
 
-            try {
-                const trackData: Partial<Track> = {
-                    filePath: `netease://${song.id}`,
-                    title: song.title,
-                    artist: song.artist,
-                    album: song.album,
-                    duration: song.duration,
-                    cover: song.cover
-                };
-                const trackResult = await libraryController.addTrackToLibrary(trackData);
-                const fileId = trackResult?.track?.fileId;
-                if (!trackResult?.success || !fileId) {
+        const trackData = input.songs.map((song): Partial<Track> => ({
+            filePath: `netease://${song.id}`,
+            title: song.title,
+            artist: song.artist,
+            album: song.album,
+            duration: song.duration,
+            cover: song.cover
+        }));
+        const bulkResult = await libraryDataService.bulkImportVirtualTracksToPlaylist(playlistId, trackData);
+        const results = Array.isArray(bulkResult.results) ? bulkResult.results : [];
+        if (!bulkResult.success) {
+            failures.push({
+                songId: input.externalId,
+                title: input.playlistName,
+                reason: bulkResult.error || '?????????'
+            });
+            skipped += input.songs.length;
+        } else {
+            for (let i = 0; i < input.songs.length; i++) {
+                const song = input.songs[i];
+                const result = results[i];
+                if (!result?.success) {
                     skipped++;
-                    failures.push({songId: song.id, title: song.title, reason: trackResult?.error || '添加到音乐库失败'});
+                    failures.push({songId: song.id, title: song.title, reason: result?.error || '??????'});
                     continue;
                 }
-                if (trackResult.isNew === false) {
+
+                if (result.isNew === false) {
                     existingCount++;
+                }
+                if (result.duplicate) {
                     duplicates++;
                 }
-
-                const addResult = await libraryController.addToPlaylist(playlistId, fileId);
-                const addResults = (addResult as {results?: Array<{success?: boolean}>})?.results;
-                const addOk = !!addResult?.success && (!addResults || addResults.some(item => item.success));
-                if (addOk) {
+                if (result.playlistAdded) {
                     added++;
-                } else {
-                    skipped++;
-                    failures.push({songId: song.id, title: song.title, reason: (addResult as any)?.error || '添加到歌单失败'});
+                } else if (!result.isNew) {
+                    existingCount++;
                 }
-            } catch (error) {
-                skipped++;
-                failures.push({songId: song.id, title: song.title, reason: error instanceof Error ? error.message : '迁移异常'});
             }
         }
 
@@ -390,6 +480,68 @@ class NetEaseAssetMigrationService {
         });
 
         return {playlistId, added, existing: existingCount, skipped, duplicates, failures};
+    }
+
+    private ensureNotCancelled(
+        control?: NetEaseMigrationControl,
+        onProgress?: ProgressHandler,
+        kind: NetEaseMigrationAssetKind = 'recent-plays',
+        label = '网易云资产'
+    ): boolean {
+        if (!control?.isCancelled()) {
+            return false;
+        }
+
+        onProgress?.({
+            kind,
+            label,
+            current: 0,
+            total: 0,
+            message: '已取消网易云资产迁移',
+            phase: 'cancelled'
+        });
+        return true;
+    }
+
+    private cancelledSummary(
+        preview: NetEaseMigrationPreview,
+        failures: NetEaseMigrationFailure[],
+        importedPlaylists: number,
+        importedTracks: number,
+        existingTracks: number,
+        skippedTracks: number
+    ): MigrationSummary {
+        netEaseMigrationReportService.recordPlaylistImport({
+            externalId: 'asset-migration-cancelled',
+            playlistName: '[网易云] 资产迁移',
+            snapshot: {
+                playlistCount: importedPlaylists,
+                trackCount: importedTracks + existingTracks + skippedTracks
+            },
+            total: preview.groups.reduce((total, group) => total + group.count, 0),
+            added: importedTracks,
+            existing: existingTracks,
+            skipped: skippedTracks,
+            duplicates: 0,
+            failures: failures.length ? failures : [{
+                songId: 'asset-migration-cancelled',
+                title: '网易云资产迁移',
+                reason: 'cancelled'
+            }],
+            status: 'cancelled'
+        });
+
+        return {
+            success: false,
+            preview,
+            importedPlaylists,
+            importedTracks,
+            existingTracks,
+            skippedTracks,
+            failures,
+            cancelled: true,
+            error: 'cancelled'
+        };
     }
 
     private async ensurePlaylist(input: {

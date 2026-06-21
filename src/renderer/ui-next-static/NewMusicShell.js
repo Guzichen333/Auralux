@@ -21,7 +21,7 @@
     if (!this.el) throw new Error('鏂扮晫闈㈡寕杞界偣涓嶅瓨鍦? ' + opts.el);
 
     var M = opts.mockData || global.MusicBoxMock;
-    if (!M) throw new Error('鏈彁渚?UI-NEXT 鍒濆鏁版嵁');
+    if (!M) throw new Error('Auralux 初始化数据未提供');
 
     this.mock = M;
     this.adapter = opts.adapter || null;
@@ -71,6 +71,7 @@
           partialCount: 0,
           failedCount: 0,
           undoneCount: 0,
+          cancelledCount: 0,
           added: 0,
           existing: 0,
           skipped: 0,
@@ -859,6 +860,70 @@
     }
   };
 
+  NewMusicShell.prototype._detachReusableNetEaseMenu = function () {
+    if (!this.state.neteaseAssetMigrationRunning || !this.state.neteaseMenuOpen || !this.root) return null;
+    var account = this.root.querySelector('.mb-netease-account');
+    var menu = account && account.querySelector ? account.querySelector('.mb-netease-menu') : null;
+    if (!menu || !menu.parentNode) return null;
+    menu.parentNode.removeChild(menu);
+    return menu;
+  };
+
+  NewMusicShell.prototype._restoreReusableNetEaseMenu = function (menu) {
+    if (!menu || !this.state.neteaseAssetMigrationRunning || !this.state.neteaseMenuOpen || !this.root) return;
+    var nextAccount = this.root.querySelector('.mb-netease-account');
+    if (!nextAccount) return;
+    var nextMenu = nextAccount.querySelector('.mb-netease-menu');
+    if (nextMenu && nextMenu.parentNode) {
+      nextMenu.parentNode.replaceChild(menu, nextMenu);
+      return;
+    }
+    nextAccount.appendChild(menu);
+  };
+
+  NewMusicShell.prototype.renderNetEaseAccountStatus = function () {
+    if (!this.root) {
+      this.render();
+      return;
+    }
+
+    var account = this.root.querySelector('.mb-netease-account');
+    if (!account || !account.parentNode) {
+      this.render();
+      return;
+    }
+
+    var s = this.state;
+    var topbar = TopSearch({
+      query: s.searchQuery,
+      focused: s.searchFocused,
+      results: s.searchResults,
+      filters: s.searchFilters,
+      activeFilter: s.searchFilter,
+      history: s.searchHistory,
+      suggestions: s.searchSuggestions,
+      selectedIndex: s.searchSelectedIndex,
+      neteaseStatus: s.neteaseStatus,
+      neteaseAvatarUrl: s.neteaseAvatarUrl,
+      neteaseNickname: s.neteaseNickname,
+      neteaseLastSyncText: s.neteaseLastSyncText,
+      neteaseSyncStatus: s.neteaseSyncStatus,
+      neteaseAssetMigrationRunning: s.neteaseAssetMigrationRunning,
+      neteaseAccountCenter: s.neteaseAccountCenter,
+      neteaseMenuOpen: s.neteaseMenuOpen,
+      canGoBack: s.canGoBack,
+      canGoForward: s.canGoForward,
+      onToggleNetEaseMenu: this.toggleNetEaseMenu.bind(this)
+    });
+    var nextAccount = topbar.querySelector('.mb-netease-account');
+    if (!nextAccount) {
+      this.render();
+      return;
+    }
+
+    account.parentNode.replaceChild(nextAccount, account);
+  };
+
   NewMusicShell.prototype._handleSearchKeydown = function (e) {
     if (!this.state.searchFocused) return;
     var filtered = applySearchFilter(this.state.searchResults, this.state.searchFilter);
@@ -975,6 +1040,8 @@
       this._immersiveSmoothFrame = 0;
     }
 
+    var preservedNetEaseMenu = this._detachReusableNetEaseMenu();
+
     var sidebar = Sidebar({
       state: s,
       playlists: this.mock.playlists,
@@ -1069,6 +1136,11 @@
       onMigrateAllNetEaseAssets: function () {
         s.neteaseMenuOpen = false;
         if (self.adapter && typeof self.adapter.migrateAllNetEaseAssets === 'function') self.adapter.migrateAllNetEaseAssets();
+        self.render();
+      },
+      onShowNetEaseMigrationProgress: function () {
+        s.neteaseMenuOpen = false;
+        if (self.adapter && typeof self.adapter.showActiveNetEaseMigration === 'function') self.adapter.showActiveNetEaseMigration();
         self.render();
       },
       onOpenMigrationDashboard: function () {
@@ -1167,6 +1239,7 @@
       playlistContextMenu,
       confirmDialog
     ]);
+    this._restoreReusableNetEaseMenu(preservedNetEaseMenu);
 
     this._topbarEl = this.root.querySelector('.mb-topbar');
     this._searchInput = this.root.querySelector('.mb-search__input');
@@ -1594,7 +1667,8 @@
     function reportRow(report) {
       var failures = report.failures || [];
       var expanded = expandedReportIds.indexOf(report.id) >= 0;
-      return h('div', { class: 'mb-migration-report' }, [
+      var isCancelled = report.status === 'cancelled';
+      return h('div', { class: 'mb-migration-report' + (isCancelled ? ' is-cancelled' : '') }, [
         h('div', { class: 'mb-migration-report__main' }, [
           h('span', { class: 'mb-migration-report__name' }, report.playlistName || '未命名歌单'),
           h('span', { class: 'mb-migration-report__meta' }, [
@@ -1614,7 +1688,7 @@
         failures.length ? h('button', {
           class: 'mb-migration-report__toggle',
           onclick: function () { self.onToggleMigrationReportFailures(report.id); }
-        }, expanded ? '收起失败原因' : '查看失败原因') : null,
+        }, isCancelled ? (expanded ? '收起取消原因' : '查看取消原因') : (expanded ? '收起失败原因' : '查看失败原因')) : null,
         expanded ? h('div', { class: 'mb-migration-report__failures' }, failures.slice(0, 8).map(function (failure) {
           return h('div', { class: 'mb-migration-report__failure' }, [
             h('span', { class: 'mb-migration-report__failure-title' }, failure.title || String(failure.songId || '未知歌曲')),
@@ -1642,6 +1716,7 @@
           metric('完成', summary.completedCount, 'success'),
           metric('部分完成', summary.partialCount, 'warning'),
           metric('失败', summary.failedCount, 'danger'),
+          metric('已取消', summary.cancelledCount, 'muted'),
           metric('已撤销', summary.undoneCount, 'muted')
         ]),
         h('div', { class: 'mb-migration-totals' }, [
@@ -1863,7 +1938,7 @@
       h('section', { class: 'mb-section' }, [
         h('div', { class: 'mb-section__head' }, [
           h('span', { class: 'mb-section__title' }, '\u8bbe\u7f6e'),
-          h('span', { class: 'mb-section__count numeric' }, 'UI-NEXT')
+          h('span', { class: 'mb-section__count numeric' }, '偏好设置')
         ]),
         h('div', { class: 'mb-settings-panel' }, [
           h('div', { class: 'mb-settings-panel__head' }, [

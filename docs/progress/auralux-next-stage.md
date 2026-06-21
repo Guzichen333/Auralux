@@ -1,5 +1,496 @@
 # Auralux Next Stage Progress Log
 
+## Stage 44: Trusted NetEase Sync Failure / Retry Loop
+
+### Target
+
+Make NetEase playlist sync failures and conflicts understandable and retryable from UI-NEXT:
+
+- failure fallback copy is Chinese and user-facing;
+- conflict copy clearly says local songs are protected;
+- missing NetEase playlist id does not leak English implementation wording;
+- the top-right `重试同步` action retries retryable playlist sync states instead of only refreshing account status;
+- dashboard/account-center state refreshes after retry.
+
+Scope boundaries:
+
+- Do not touch playback core.
+- Do not touch immersive playback visuals.
+- Do not change migration write semantics.
+- Reuse the existing `NetEaseSyncStateService.retryPlaylistSync()` trusted sync path.
+
+### Changed Files
+
+- `scripts/verify-netease-trusted-sync-stage44.js`
+- `src/renderer/src/features/netease/service/NetEaseSyncStateService.ts`
+- `src/renderer/src/ui-next/UINextMusicBoxAdapter.ts`
+- `docs/progress/auralux-next-stage.md`
+
+### Implementation Notes
+
+- Added a focused Stage 44 verifier and watched it fail first on the existing English sync fallback copy.
+- Localized sync fallback reasons:
+  - `网易云同步失败`
+  - `缺少网易云歌单 ID`
+  - `发现同步冲突：... 本地歌曲会保留，请确认后再重试同步。`
+- `retryNetEaseAccountSync()` now delegates to `retryRetryableNetEaseSyncs()`.
+- The retry-all helper enumerates `netEaseSyncStateService.getAllPlaylistSyncStates()`, retries states with `retryable === true`, refreshes NetEase account status, migration dashboard, and account center, then renders current UI state.
+- If no retryable state exists, the action refreshes account status and tells the user `没有需要重试的网易云同步，已刷新账号状态`.
+
+### Verification Results
+
+- `node scripts/verify-netease-trusted-sync-stage44.js`: RED first, then PASS.
+- `node scripts/verify-netease-trusted-sync.js`: PASS.
+- `node scripts/verify-netease-migration-dashboard.js`: PASS.
+- `node scripts/verify-stage36-visible-copy-cleanup.js`: PASS.
+- `node --check src/renderer/src/features/netease/service/NetEaseSyncStateService.ts`: PASS.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS, Vite built 219 modules and copied 23 static items.
+- `npm.cmd run build:ts`: PASS.
+- GitNexus `impact` could not find the new Stage 44 symbols in the current index, so risk for those exact symbols is `UNKNOWN`.
+- GitNexus `detect_changes({repo: "MusicBox", scope: "unstaged"})`: CRITICAL, `changed_count 42`, `affected_count 27`, `changed_files 17`. This is the accumulated dirty worktree risk, not isolated Stage 44 scope.
+
+### Runtime Test Request
+
+After dev restart or while the current CDP-enabled Electron instance is running:
+
+- open the top-right NetEase avatar menu;
+- confirm `重试同步` is visible and clickable;
+- if no failed/conflict sync exists, clicking it should show `没有需要重试的网易云同步，已刷新账号状态`;
+- if a failed/conflict playlist sync exists, it should retry via the trusted playlist sync state path and refresh `迁移状态`.
+
+## Stage 45: Search Experience Completion
+
+### Target
+
+Make UI-NEXT search feel like a daily-use search surface rather than a raw result list:
+
+- keep search history, fuzzy suggestions, filters, local/NetEase source labels, direct play, favorite, and add-to-playlist actions;
+- remove remaining English search entity copy;
+- make playlist/entity results explicitly actionable with an `打开` control;
+- keep layout stable when entity action buttons appear.
+
+Scope boundaries:
+
+- Do not touch playback core.
+- Do not change search providers or NetEase API behavior.
+- Do not add artist/album/statistics product areas back.
+- Keep changes inside UI-NEXT search rendering and adapter search entity shaping.
+
+### Changed Files
+
+- `scripts/verify-netease-search-stage45.js`
+- `src/renderer/src/ui-next/UINextMusicBoxAdapter.ts`
+- `src/renderer/ui-next-static/components/TopSearch.js`
+- `src/renderer/ui-next-static/components/SearchResultsView.js`
+- `src/renderer/ui-next-static/styles.css`
+- `docs/progress/auralux-next-stage.md`
+
+### Implementation Notes
+
+- Added a focused Stage 45 verifier and watched it fail first on existing English copy (`NetEase artist result`, `tracks`).
+- Search entity subtitles are now Chinese:
+  - `网易云歌手`
+  - `本地歌手`
+  - `N 首歌曲`
+- Top search panel playlist entities now render a stable `打开` action button.
+- Full search results page playlist entities now render the same explicit `打开` action button.
+- Added fixed-width `.mb-search-entity__open` styling so entity rows do not shift when the action appears.
+
+### Verification Results
+
+- `node scripts/verify-netease-search-stage45.js`: RED first, then PASS.
+- `node scripts/verify-netease-search-experience.js`: PASS.
+- `node --check src/renderer/ui-next-static/components/TopSearch.js`: PASS.
+- `node --check src/renderer/ui-next-static/components/SearchResultsView.js`: PASS.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS, Vite built 219 modules and copied 23 static items.
+- `npm.cmd run build:ts`: PASS.
+- GitNexus impact before edits:
+  - `UINextMusicBoxAdapter.search`: LOW.
+  - `TopSearch`: LOW.
+- GitNexus `detect_changes({repo: "MusicBox", scope: "unstaged"})`: CRITICAL, `changed_count 43`, `affected_count 27`, `changed_files 19`. This is accumulated dirty worktree risk; Stage 45 direct UI scope is search rendering/entity presentation.
+
+### Runtime Verification
+
+Restarted Electron with CDP at `http://127.0.0.1:9223` and verified through Playwright DOM automation:
+
+- App title is `Auralux`.
+- Searching `网易云` renders filters `全部 / 歌曲 / 歌手 / 专辑 / 歌单`.
+- Search entities render with Chinese subtitles and no `NetEase artist result`, `Local artist result`, or `N tracks` copy.
+- NetEase playlist entities render `打开` buttons.
+- Entity result sample included `[网易云] 我喜欢71 首歌曲网易云打开`.
+
+## Stage 46: Offline / Cache State Completion
+
+### Target
+
+Make offline/cache confidence visible at the playlist level, not only inside individual track rows:
+
+- preserve row-level `离线可播 / 已匹配本地 / 仅云端`, cover-cache, and lyrics-cache chips;
+- add playlist-header summary for offline playable count, cover cache count, and lyrics cache count;
+- do not touch playback resolution, queue behavior, or immersive playback quality.
+
+Scope boundaries:
+
+- Do not modify `toUINextTrack()` or playback resolver behavior in this stage.
+- Do not change NetEase local matching thresholds.
+- Only add UI summary on top of existing status fields.
+
+### Changed Files
+
+- `scripts/verify-offline-cache-stage46.js`
+- `src/renderer/ui-next-static/components/PlaylistView.js`
+- `src/renderer/ui-next-static/styles.css`
+- `docs/progress/auralux-next-stage.md`
+
+### Implementation Notes
+
+- Added a focused Stage 46 verifier and watched it fail first because `PlaylistView` had no playlist-level cache summary.
+- `PlaylistView` now computes `cacheSummary` from existing UI track fields:
+  - `offlinePlayable`
+  - `coverCacheStatus`
+  - `lyricsCacheStatus`
+- Playlist header now shows compact chips:
+  - `离线 N/M`
+  - `封面 N/M`
+  - `歌词 N/M`
+- Added fixed, compact `.mb-pl-cache-summary*` styles to keep the header scan-friendly.
+
+### Verification Results
+
+- `node scripts/verify-offline-cache-stage46.js`: RED first, then PASS.
+- `node scripts/verify-offline-status.js`: PASS.
+- `node --check src/renderer/ui-next-static/components/PlaylistView.js`: PASS.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS, Vite built 219 modules and copied 23 static items.
+- `npm.cmd run build:ts`: PASS.
+- GitNexus impact before edits:
+  - `PlaylistView`: LOW.
+  - `toUINextTrack`: HIGH, so Stage 46 avoided touching it.
+- GitNexus `detect_changes({repo: "MusicBox", scope: "unstaged"})`: CRITICAL, `changed_count 44`, `affected_count 27`, `changed_files 20`. This is accumulated dirty worktree risk.
+
+### Runtime Verification
+
+Restarted Electron with CDP at `http://127.0.0.1:9223` and verified through Playwright DOM automation:
+
+- Opened real playlist `[网易云] 我喜欢`.
+- Playlist header rendered cache summary:
+  - `离线71/71`
+  - `封面71/71`
+  - `歌词0/71`
+- Track row status chips still rendered samples:
+  - `已匹配本地`
+  - `封面已缓存`
+  - `歌词待缓存`
+  - `匹配 100%`
+
+## Stage 47: Startup Page / Startup Warmup Completion
+
+### Target
+
+Make startup feel intentional and trustworthy while backend/cache work starts:
+
+- keep the dynamic startup splash and bounded exit guard;
+- keep startup warmup tasks for settings, library, playback queue, NetEase API/profile, cover cache, cover manifest, lyrics index, and lyrics cache;
+- remove remaining English user-visible warmup task labels/messages;
+- verify startup does not get stuck on the splash.
+
+Scope boundaries:
+
+- Do not change playback core.
+- Do not change Electron main-process startup ordering.
+- Do not increase startup blocking time beyond the existing bounded guard.
+
+### Changed Files
+
+- `scripts/verify-startup-stage47.js`
+- `src/renderer/src/ui-next/startupWarmup.ts`
+- `docs/progress/auralux-next-stage.md`
+
+### Implementation Notes
+
+- Added a focused Stage 47 verifier and watched it fail first on English warmup copy:
+  - `Preload playlist cover metadata`
+  - `Warm lyrics cache index`
+  - `cover cache hits`
+  - `queued cover checks`
+  - `lyrics cache warmed`
+- Localized remaining startup warmup labels/messages:
+  - `预加载歌单封面`
+  - `预热歌词索引`
+  - `封面缓存命中 N 个`
+  - `已排队检查封面 N 个`
+  - `歌单封面缓存已就绪`
+  - `歌词索引已预热 N 项`
+  - `歌词索引已就绪`
+
+### Verification Results
+
+- `node scripts/verify-startup-stage47.js`: RED first, then PASS.
+- `node scripts/verify-startup-warmup.js`: PASS.
+- `node scripts/verify-startup-splash-exit.js`: PASS.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS, Vite built 219 modules and copied 23 static items.
+- `npm.cmd run build:ts`: PASS.
+- GitNexus impact:
+  - `startupWarmup`: not found in current index, treated as index coverage gap.
+  - `NewMusicShell`: LOW.
+- GitNexus `detect_changes({repo: "MusicBox", scope: "unstaged"})`: CRITICAL, `changed_count 44`, `affected_count 27`, `changed_files 21`. This is accumulated dirty worktree risk.
+
+### Runtime Verification
+
+Restarted Electron with CDP at `http://127.0.0.1:9223` and verified:
+
+- DevTools endpoint was available.
+- Runtime logs showed window display, library cache loading, NativeAudio initialization, and NetEase API running at `http://127.0.0.1:3000`.
+- DOM check after startup:
+  - title `Auralux`;
+  - `.mb-startup` absent;
+  - `.ui-next-shell` present;
+  - no `Preload playlist cover metadata` or `Warm lyrics cache index` text in body.
+
+## Stage 48: UI-NEXT / Old UI Compatibility Boundary
+
+### Target
+
+Lock the product onto UI-NEXT while preventing risky wholesale deletion of compatibility-only old runtime code:
+
+- renderer entry boots UI-NEXT directly;
+- no visible return-to-old-UI switch;
+- old artist/album/statistics navigation and settings stay removed;
+- retired settings are still migrated away so old cache values cannot resurrect removed pages;
+- old UI runtime remains compatibility-only where dialogs, widgets, plugin host compatibility, and legacy ports are still reused.
+
+Scope boundaries:
+
+- Do not delete old runtime directories wholesale in this stage.
+- Do not remove plugin compatibility host fields yet.
+- Do not remove reused NetEase/login/import dialogs.
+- Do not touch playback or immersive player.
+
+### Changed Files
+
+- `scripts/verify-stage48-ui-next-legacy-boundary.js`
+- `docs/progress/auralux-next-stage.md`
+
+### Implementation Notes
+
+- Added a focused Stage 48 verifier and watched it fail first because the Stage 48 boundary had not been recorded.
+- Confirmed `src/renderer/src/app/bootstrap/main.ts` boots `../../ui-next/bootstrap` directly and has no `loadLegacyApp` or `legacy-ui` fallback.
+- Confirmed `scripts/verify-ui-next-formalized.js` passes.
+- Confirmed `scripts/verify-no-legacy-artist-album-statistics.js` passes.
+- Confirmed `SettingsStore` keeps `retiredSettingKeys` for `statistics`, `artistsPage`, and `albumsPage`, and deletes those keys during migration. This is intentional cleanup, not a product feature.
+- old UI runtime remains compatibility-only because UI-NEXT still reuses old widgets/dialogs and plugin compatibility ports.
+
+### Verification Results
+
+- `node scripts/verify-stage48-ui-next-legacy-boundary.js`: RED first, then PASS.
+- `node scripts/verify-no-legacy-artist-album-statistics.js`: PASS.
+- `node scripts/verify-ui-next-formalized.js`: PASS.
+- `npm.cmd run typecheck:renderer`: pending in Stage 49 aggregate gate.
+- `npm.cmd run build:renderer`: pending in Stage 49 aggregate gate.
+
+### Runtime Verification
+
+No extra runtime restart was required for this documentation/guard boundary. Stage 47 runtime verification already proved the app starts into `.ui-next-shell`, and Stage 48 adds guard coverage so old UI switches/pages do not reappear.
+
+## Stage 49: Release Quality Gate / Pre-Commit Review
+
+### Target
+
+Run a consolidated quality gate over the accumulated UI-NEXT, NetEase, startup, cache/offline, old-UI boundary, and playback-regression guards before any commit or release decision.
+
+Scope boundaries:
+
+- Do not clean, reset, revert, or commit.
+- Do not delete runtime logs.
+- Treat GitNexus CRITICAL as accumulated dirty-worktree review scope, not as cleanup permission.
+
+### Changed Files
+
+- `scripts/verify-auralux-stage35-quality-gate.js`
+- `scripts/verify-netease-asset-migration-preflight.js`
+- `scripts/verify-netease-asset-migration.js`
+- `docs/progress/auralux-next-stage.md`
+
+### Implementation Notes
+
+- Added Stage 44-48 guards into the aggregate Stage 35 quality gate:
+  - trusted sync Stage 44;
+  - search Stage 45;
+  - offline/cache Stage 46;
+  - startup Stage 47;
+  - UI-NEXT/legacy boundary Stage 48;
+  - migration lifecycle/render/bulk/preflight/cancel guards from Stage 37-43.
+- Updated older migration guards to match the current bulk-import and cancellation-aware migration architecture:
+  - `migratePreview(preview, onProgress, control)`;
+  - `bulkImportVirtualTracksToPlaylist`;
+  - no per-track `libraryController.addTrackToLibrary` / `libraryController.addToPlaylist` path in NetEase full migration.
+
+### Verification Results
+
+- `node scripts/verify-auralux-stage35-quality-gate.js`: PASS after updating stale migration guards.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS, Vite built 219 modules and copied 23 static items.
+- `npm.cmd run build:ts`: PASS.
+
+### Runtime Verification
+
+Restarted Electron with CDP at `http://127.0.0.1:9223` and ran final smoke:
+
+- Startup leaves splash and reaches `.ui-next-shell`.
+- Top-right NetEase account trigger shows `网易云：已登录`.
+- NetEase account menu renders `迁移全部资产`, `重新登录`, `重试同步`, `迁移状态`, `复制诊断`.
+- Search `网易云` renders filters and playlist entities with `打开`; no `NetEase artist result` or `N tracks` copy remains.
+- Opened real playlist `[网易云] 我喜欢`; cache summary renders `离线71/71`, `封面71/71`, `歌词0/71`.
+
+### Remaining Review Risk
+
+- GitNexus `detect_changes({repo: "MusicBox", scope: "unstaged"})`: CRITICAL, `changed_count 44`, `affected_count 27`, `changed_files 24`. This is expected because the dirty worktree contains many accumulated stages across NetEase migration/sync, UI-NEXT search/cache/startup, playback guards, and library IPC.
+- Runtime/dev logs remain dirty or untracked by instruction; do not clean them unless explicitly asked.
+
+## Stage 39: NetEase Migration Result Consistency
+
+### Target
+
+Make the UI state consistent after complete NetEase migration now that Stage 38 writes library data in bulk. The migration result must be based on real bulk-write results, and UI-NEXT should reload the library snapshot before showing migration/dashboard/account state.
+
+Scope boundaries:
+
+- Do not change playback core.
+- Do not change immersive playback visuals.
+- Do not add local matching behavior.
+- Keep Stage 38 bulk import IPC semantics intact.
+
+### Changed Files
+
+- `scripts/verify-netease-migration-result-consistency.js`
+- `src/renderer/src/ui-next/UINextMusicBoxAdapter.ts`
+- `docs/progress/auralux-next-stage.md`
+
+### Implementation Notes
+
+- Added a focused consistency guard for migration result accounting and post-migration UI refresh.
+- `UINextMusicBoxAdapter.migrateAllNetEaseAssets()` now calls `refreshLibrarySnapshotAfterNetEaseMigration()` after the account-menu migration completes.
+- The helper reloads the library snapshot, rebuilds derived playlist/dashboard/account surfaces, and renders once so imported NetEase playlists and counts reflect the persisted cache.
+- Existing Stage 38 bulk result fields remain the source for `added`, `existing`, `duplicates`, skipped failures, and report status.
+
+### Verification Results
+
+- `node scripts/verify-netease-migration-result-consistency.js`: RED first, then PASS with 13 checks.
+- `node scripts/verify-netease-asset-migration-bulk-library-write.js`: PASS.
+- `node scripts/verify-netease-asset-migration-render-isolation.js`: PASS.
+- `npm.cmd run build:ts`: PASS.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS, Vite built 219 modules and copied 23 static items.
+
+### Manual Test Request
+
+Restart the dev app, run complete NetEase migration, and confirm:
+
+- imported NetEase playlists appear without manually restarting;
+- playlist track counts match the migration result;
+- running the same migration again does not duplicate tracks inside playlists;
+- migration dashboard/account menu counts refresh after completion.
+
+## Stage 38: NetEase Migration Bulk Library Writes
+
+### Target
+
+Fix migration-time UI hangs caused by importing NetEase assets through per-track library IPC calls. Logs showed migration had already passed NetEase API calls and was spending time in repeated `LibraryCacheManager` writes: each track went through `addTrackToLibrary()` and `addToPlaylist()`, causing repeated whole-cache saves and repeated `library:updated` events.
+
+Scope boundaries:
+
+- Do not change playback core.
+- Do not change immersive playback visuals.
+- Do not change normal local-file import behavior.
+- Keep existing single-track library APIs compatible.
+
+### Changed Files
+
+- `scripts/verify-netease-asset-migration-bulk-library-write.js`
+- `src/main/controllers/LibraryController.ts`
+- `src/main/preload.ts`
+- `src/renderer/src/api/types/electron.ts`
+- `src/renderer/src/infrastructure/electron/LibraryGateway.ts`
+- `src/renderer/src/features/library/service/LibraryDataService.ts`
+- `src/renderer/src/features/netease/service/NetEaseAssetMigrationService.ts`
+- `docs/progress/auralux-next-stage.md`
+
+### Implementation Notes
+
+- Added `library:bulkImportVirtualTracksToPlaylist`.
+- The bulk path accepts NetEase virtual tracks only, creates missing virtual tracks, adds them to the target playlist, saves the cache once, and emits one `library:updated` event.
+- NetEase asset migration now uses `libraryDataService.bulkImportVirtualTracksToPlaylist()` instead of per-track `libraryController.addTrackToLibrary()` plus `libraryController.addToPlaylist()`.
+- Existing single-track import and add-to-playlist APIs remain unchanged for other flows.
+
+### Verification Results
+
+- `node scripts/verify-netease-asset-migration-bulk-library-write.js`: RED first, then PASS with 11 checks.
+- `node scripts/verify-netease-asset-migration-render-isolation.js`: PASS.
+- `node scripts/verify-netease-account-menu-migration-running.js`: PASS.
+- `npm.cmd run build:ts`: PASS.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS, Vite built 219 modules and copied 23 static items.
+
+### Manual Test Request
+
+Restart the dev app, start `迁移全部资产`, and watch whether the UI remains responsive during the local write phase. Expected behavior:
+
+- NetEase API requests still run normally.
+- The progress text may update by asset group instead of every single song.
+- The app should not freeze while songs are written into the local library.
+- After migration finishes, the library should refresh once and imported NetEase playlists should contain the migrated tracks.
+
+## Stage 37: NetEase Migration Render Isolation
+
+### Target
+
+Prevent complete NetEase asset migration running-state updates from forcing full UI-NEXT shell renders. This stage addresses the customer-experience issue where migration progress and account-menu state changes could make the top-right avatar menu flicker or feel unresponsive.
+
+Scope boundaries:
+
+- Do not change playback core.
+- Do not change immersive playback visuals or quality.
+- Do not continue local-song matching work.
+- Do not delete, clean, reset, or commit runtime logs.
+
+### Changed Files
+
+- `docs/superpowers/plans/2026-06-21-stage37-netease-migration-render-isolation.md`
+- `scripts/verify-netease-asset-migration-render-isolation.js`
+- `scripts/verify-netease-account-menu-migration-running.js`
+- `src/renderer/src/ui-next/UINextMusicBoxAdapter.ts`
+- `src/renderer/ui-next-static/NewMusicShell.js`
+- `docs/progress/auralux-next-stage.md`
+
+### Implementation Notes
+
+- Added an adapter-level `netEaseAssetMigrationInFlight` guard so repeated complete-migration clicks show a running-state toast instead of starting a second migration.
+- Added `setNetEaseAssetMigrationRunning(running)` so migration running-state changes are centralized.
+- Added `NewMusicShell.renderNetEaseAccountStatus()` and wired the adapter to use it when available.
+- The focused renderer swaps only the top-right `.mb-netease-account` subtree instead of rebuilding the whole shell.
+- Existing open-menu stability remains guarded by the Stage 36 account-menu dropdown preservation checks.
+
+### Verification Results
+
+- `node scripts/verify-netease-asset-migration-render-isolation.js`: RED first, then PASS with 10 checks.
+- `node scripts/verify-netease-account-menu-migration-running.js`: PASS after aligning it with the focused render path.
+- `node scripts/verify-netease-account-menu-render-stability.js`: PASS.
+- `node --check src/renderer/ui-next-static/NewMusicShell.js`: PASS.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS, Vite built 219 modules and copied 23 static items.
+
+### Manual Test Request
+
+Restart the dev app, start `迁移全部资产`, click outside the migration modal, then open the top-right NetEase avatar menu while migration is still running. Confirm:
+
+- the menu opens normally;
+- it does not visibly flicker;
+- the primary migration action shows the running state and cannot be clicked again;
+- the app does not become noticeably less smooth during the menu interaction.
+
 ## Stage 23: NetEase Account Menu Asset Migration Entry
 
 ### Target
@@ -2547,3 +3038,219 @@ GitNexus staged detection is still expected to report high or critical risk beca
   - `dev-restart.err.log`
 
 Do not clean or delete these unless the user explicitly asks.
+
+## Stage 40: NetEase Migration Progress Lifecycle
+
+### Target
+
+Make full NetEase asset migration controllable and observable during long runs:
+
+- Add explicit migration lifecycle phases: preflight, fetching, writing, refreshing, completed, cancelled, failed.
+- Add a cancel control for the long migration modal.
+- Keep already written library data when cancellation is requested.
+- Stop at stage/playlist boundaries; do not interrupt an active bulk write mid-batch.
+- Keep the top-right account menu running state independent from the full shell render path.
+
+### Implementation Notes
+
+- `NetEaseMigrationProgress` now carries an optional `phase`.
+- `NetEaseMigrationControl` exposes `isCancelled()`.
+- `NetEaseAssetMigrationService` accepts an optional cancellation control in full migration and preview migration.
+- Cancellation is checked before each major group, before each user playlist, and before bulk playlist write.
+- Cancelled playlist attempts record `status: 'cancelled'` in migration reports.
+- The import modal now creates a `取消迁移` button, shows it while migration is running, disables it after click, and hides it in `finally`.
+- The modal passes `isCancelled: () => this.assetMigrationCancelRequested` into the migration service.
+
+### Verification Results
+
+- `node scripts/verify-netease-migration-progress-lifecycle.js`: PASS.
+- `node scripts/verify-netease-migration-result-consistency.js`: PASS.
+- `node scripts/verify-netease-asset-migration-bulk-library-write.js`: PASS.
+- `node scripts/verify-netease-asset-migration-render-isolation.js`: PASS.
+- `node scripts/verify-netease-account-menu-migration-running.js`: PASS.
+- `npm.cmd run build:ts`: PASS.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS.
+- GitNexus `detect_changes({repo: "MusicBox", scope: "unstaged"})`: CRITICAL because the worktree still contains accumulated multi-stage NetEase, UI-NEXT, playback, and library changes. Treat as review scope signal, not cleanup permission.
+
+### Manual Test Request
+
+After dev restart:
+
+- Open the top-right NetEase avatar/account menu and start full asset migration.
+- Confirm the migration modal shows `取消迁移` while running.
+- Click cancel during fetching or before a later playlist write.
+- Confirm the app remains responsive.
+- Confirm already imported playlists/tracks remain.
+- Confirm running migration again can continue/retry.
+- Confirm the top-right menu still shows migration running state while active and stops after completion/cancel.
+
+## Stage 41: NetEase Migration Progress Re-entry
+
+### Target
+
+Fix the UX gap after Stage 40: when full NetEase migration continues in the background and the modal has been closed/collapsed, the top-right account menu must let the user return to the active progress/cancel surface.
+
+Scope:
+
+- Do not touch playback, immersive player, local matching, or migration write semantics.
+- Keep duplicate migration prevention.
+- Change the running menu action from dead/disabled feedback to a real progress re-entry.
+
+### Implementation Notes
+
+- `NetEaseCloudMusic.showAssetMigrationProgressModal()` reopens the import modal.
+- If migration is running, the modal shows a background-progress message, keeps `取消迁移` visible, and focuses the cancel button.
+- `UINextMusicBoxAdapter.showActiveNetEaseMigration()` delegates to the NetEase widget and shows a fallback toast if the widget is unavailable.
+- `NewMusicShell` passes `onShowNetEaseMigrationProgress` into `TopSearch`.
+- `TopSearch` changes the running primary action to `查看迁移进度` and calls the progress re-entry handler instead of disabling the action.
+
+### Verification Results
+
+- `node scripts/verify-netease-migration-progress-reentry.js`: first RED, then PASS.
+- `node scripts/verify-netease-migration-progress-lifecycle.js`: PASS after updating the Stage 40 guard to the new running-action behavior.
+- `node scripts/verify-netease-account-menu-migration-running.js`: PASS after updating the guard from disabled-running action to progress re-entry.
+- `node scripts/verify-netease-account-menu-render-stability.js`: PASS.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS.
+- `npm.cmd run build:ts`: PASS.
+- GitNexus `detect_changes({repo: "MusicBox", scope: "unstaged"})`: CRITICAL due to accumulated multi-stage dirty worktree. Stage 41 direct scope is top-right NetEase menu, UI-NEXT adapter, and the existing NetEase migration widget.
+
+### Manual Test Request
+
+After dev restart:
+
+- Start full NetEase migration from the top-right account menu.
+- Close/collapse the migration modal while migration is still running.
+- Reopen the top-right account menu.
+- Confirm the primary action says `查看迁移进度`.
+- Click it and confirm the migration modal reopens.
+- Confirm `取消迁移` is visible and usable.
+- Confirm it does not start a duplicate migration.
+
+## Stage 42: NetEase Cancelled Migration Dashboard State
+
+### Target
+
+After Stage 40/41 added cancellation, the migration dashboard must treat cancelled migrations as a first-class, understandable state instead of blending them into failure/skip noise.
+
+Scope:
+
+- Do not change migration write behavior.
+- Do not change playback, immersive player, local matching, or sync retry behavior.
+- Only update dashboard state aggregation, visible labels, and diagnostics.
+
+### Implementation Notes
+
+- `UINextMigrationDashboardState.summary` now includes `cancelledCount`.
+- `buildMigrationDashboardState()` counts reports with `status === 'cancelled'`.
+- `formatMigrationReportStatus()` maps `cancelled` to `已取消`.
+- Migration diagnostics now include `取消报告 N 个`.
+- Dashboard overview renders an `已取消` metric.
+- Cancelled report rows get `is-cancelled` class and use `查看取消原因` / `收起取消原因` instead of failure wording.
+
+### Verification Results
+
+- `node scripts/verify-netease-migration-cancelled-dashboard.js`: first RED, then PASS.
+- `node scripts/verify-netease-migration-dashboard.js`: PASS.
+- `node scripts/verify-netease-migration-progress-lifecycle.js`: PASS.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS.
+- `npm.cmd run build:ts`: PASS.
+- GitNexus `detect_changes({repo: "MusicBox", scope: "unstaged"})`: CRITICAL due to accumulated dirty worktree. Stage 42 direct scope is UI-NEXT dashboard aggregation/rendering only.
+
+### Manual Test Request
+
+After dev restart:
+
+- Start full NetEase migration.
+- Cancel it from the migration modal.
+- Open `迁移状态`.
+- Confirm overview shows `已取消`.
+- Confirm the cancelled report row status reads `已取消`.
+- If a cancel reason is expandable, confirm the button says `查看取消原因`, not `查看失败原因`.
+
+## Stage 42.1: UI Test Channel Diagnosis
+
+### Finding
+
+Windows `computer-use` is partially usable against the Auralux Electron window:
+
+- `sky.list_apps()` finds the `Auralux` window.
+- Accessibility text works and exposes the UI tree, including the NetEase account button and migration labels.
+- Screenshot capture fails for this Electron window with `SetIsBorderRequired failed: 不支持此接口 (0x80004002)`.
+- Coordinate clicks are not reliable because the tool requires a successful screenshot state before issuing coordinate input.
+
+### Working Test Channel
+
+Use Electron DevTools/CDP for Auralux UI automation when real UI verification is needed:
+
+- Restart dev Electron with `--remote-debugging-port=9223`.
+- Connect Playwright over CDP to `http://127.0.0.1:9223`.
+- Operate UI through DOM events and query visible state.
+
+Verified through CDP:
+
+- App title is `Auralux`.
+- `.mb-netease-account-trigger` exists.
+- Trigger title shows `网易云：已登录`.
+- Clicking the trigger opens `.mb-netease-menu`.
+- Menu actions render: `迁移全部资产`, `重新登录`, `重试同步`, `迁移状态`, `复制诊断`.
+
+### Rule For Next UI Tests
+
+For Auralux/Electron UI tests, prefer CDP DOM automation over `computer-use` screenshot/coordinate automation. Keep `computer-use` only for accessibility text inspection or non-Electron windows unless screenshot capture starts working again.
+
+## Stage 43: Real Account Migration Cancel Verification
+
+### Target
+
+Run the full NetEase asset migration/cancel path against the currently logged-in real account, then fix any real behavior gaps found during testing.
+
+### Real Test Findings
+
+First real-account run:
+
+- Account state: `网易云：已登录`.
+- Preflight dialog reported `准备迁移 5 个歌单，约 1009 首歌曲。是否开始？`.
+- Duplicate migration was fast because the assets were already imported: result showed `歌单 5 个，新增 0 首，已存在 2018 首，跳过 0 首`.
+- Immediate preflight cancel exposed a real gap:
+  - The cancel button could be clicked during `正在预检网易云资产...`.
+  - The confirm dialog still appeared afterwards.
+  - UI showed `资产迁移已取消`, but the migration dashboard did not get a new cancelled report.
+
+### Implementation Notes
+
+- `NetEaseCloudMusic.prepareAssetMigrationPreflight()` now checks `assetMigrationCancelRequested` after preflight finishes and before showing the confirm dialog.
+- Preflight cancellation records a visible `status: 'cancelled'` report with external id `asset-migration-cancelled`.
+- `NetEaseAssetMigrationService.cancelledSummary()` now records an overall `[网易云] 资产迁移` cancelled report, so service-level cancellations also appear in the dashboard.
+
+### Verification Results
+
+- `node scripts/verify-netease-migration-preflight-cancel-report.js`: first RED, then PASS.
+- `node scripts/verify-netease-migration-cancelled-dashboard.js`: PASS.
+- `node scripts/verify-netease-migration-progress-lifecycle.js`: PASS.
+- `node scripts/verify-netease-migration-result-consistency.js`: PASS.
+- `node scripts/verify-netease-asset-migration-bulk-library-write.js`: PASS.
+- `npm.cmd run typecheck:renderer`: PASS.
+- `npm.cmd run build:renderer`: PASS.
+- `npm.cmd run build:ts`: PASS.
+- GitNexus `detect_changes({repo: "MusicBox", scope: "unstaged"})`: CRITICAL due to accumulated dirty worktree; Stage 43 direct high-risk area is `NetEaseCloudMusic`, with change limited to migration preflight/cancel/reporting.
+
+### Real Retest Results
+
+Retest through CDP/DOM automation with logged-in account:
+
+- Clicked `迁移全部资产`.
+- Clicked `取消迁移` during `正在预检网易云资产...`.
+- No confirm dialog appeared after cancellation.
+- Final modal progress: `已取消网易云资产迁移`.
+- Opened `迁移状态`.
+- Dashboard overview showed `2已取消`.
+- Latest reports include `[网易云] 资产迁移 ... 已取消`.
+- Cancelled report rows have class `is-cancelled`.
+- Cancelled report action text is `查看取消原因`.
+
+### Status
+
+Stage 43 is complete. The real-account cancellation loop is now verified end-to-end.

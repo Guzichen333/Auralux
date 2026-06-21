@@ -17,18 +17,18 @@ function expect(ok, label) {
 }
 
 expect(/neteaseAssetMigrationRunning\?: boolean/.test(adapter), 'adapter shell state includes migration running flag');
-expect(/this\.shell\.state\.neteaseAssetMigrationRunning = true/.test(adapter), 'adapter marks migration running before account-menu migration starts');
-expect(/this\.shell\.state\.neteaseAssetMigrationRunning = false/.test(adapter), 'adapter clears migration running flag after account-menu migration finishes');
-expect(/finally \{[\s\S]*neteaseAssetMigrationRunning = false/.test(adapter), 'adapter clears running flag in finally');
-expect(/this\.shell\.render\(\)/.test(adapter), 'adapter renders shell after running-state changes');
+expect(/this\.setNetEaseAssetMigrationRunning\(true\)/.test(adapter), 'adapter marks migration running before account-menu migration starts');
+expect(/this\.setNetEaseAssetMigrationRunning\(false\)/.test(adapter), 'adapter clears migration running flag after account-menu migration finishes');
+expect(/finally \{[\s\S]*setNetEaseAssetMigrationRunning\(false\)/.test(adapter), 'adapter clears running flag in finally');
+expect(/renderNetEaseAccountStatus\(\)/.test(adapter), 'adapter refreshes NetEase account status after running-state changes');
 
 expect(/neteaseAssetMigrationRunning: M\.neteaseAssetMigrationRunning \|\| false/.test(shell), 'shell default state carries migration running flag');
 expect(/neteaseAssetMigrationRunning: s\.neteaseAssetMigrationRunning/.test(shell), 'shell passes migration running flag into TopSearch');
 
 expect(/var migrationRunning = !!o\.neteaseAssetMigrationRunning/.test(topSearch), 'TopSearch reads migration running flag');
-expect(/migrationRunning \? '\\u8fc1\\u79fb\\u4e2d' : '\\u8fc1\\u79fb\\u5168\\u90e8\\u8d44\\u4ea7'/.test(topSearch), 'TopSearch changes migration action label while running');
-expect(/neteaseMenuAction\([^,]+, migrationRunning \? null : o\.onMigrateAllNetEaseAssets/.test(topSearch), 'TopSearch disables migration action while running');
-expect(/migrationRunning \? ' is-disabled' : ''/.test(topSearch), 'TopSearch adds disabled styling while running');
+expect(/migrationRunning \? '\\u67e5\\u770b\\u8fc1\\u79fb\\u8fdb\\u5ea6' : '\\u8fc1\\u79fb\\u5168\\u90e8\\u8d44\\u4ea7'/.test(topSearch), 'TopSearch changes migration action label while running');
+expect(/migrationRunning \? o\.onShowNetEaseMigrationProgress : o\.onMigrateAllNetEaseAssets/.test(topSearch), 'TopSearch reopens progress while migration is running');
+expect(/migrationRunning \? ' is-running' : ''/.test(topSearch), 'TopSearch adds running styling while running');
 
 const failed = checks.filter((check) => !check.ok);
 if (failed.length) {

@@ -116,7 +116,7 @@
         h('span', {}, '\u5df2\u8fc1\u79fb ' + (accountCenter.migratedTrackCount || 0))
       ]),
       h('div', { class: 'mb-netease-menu__actions' }, [
-        neteaseMenuAction(migrationRunning ? '\u8fc1\u79fb\u4e2d' : '\u8fc1\u79fb\u5168\u90e8\u8d44\u4ea7', migrationRunning ? null : o.onMigrateAllNetEaseAssets, 'mb-netease-menu__action--primary' + (migrationRunning ? ' is-disabled' : '')),
+        neteaseMenuAction(migrationRunning ? '\u67e5\u770b\u8fc1\u79fb\u8fdb\u5ea6' : '\u8fc1\u79fb\u5168\u90e8\u8d44\u4ea7', migrationRunning ? o.onShowNetEaseMigrationProgress : o.onMigrateAllNetEaseAssets, 'mb-netease-menu__action--primary' + (migrationRunning ? ' is-running' : '')),
         neteaseMenuAction(o.neteaseStatus === 'online' ? '\u91cd\u65b0\u767b\u5f55' : '\u767b\u5f55', o.onOpenNetEaseLogin),
         neteaseMenuAction('\u91cd\u8bd5\u540c\u6b65', o.onRetryNetEaseSync),
         neteaseMenuAction('\u8fc1\u79fb\u72b6\u6001', o.onOpenMigrationDashboard),
@@ -266,9 +266,23 @@
           h('div', { class: 'mb-row__title ellipsis' }, item.title),
           h('div', { class: 'mb-row__artist ellipsis' }, item.subtitle)
         ]),
-        SourceBadge(item.source)
+        SourceBadge(item.source),
+        item.playlistId ? openEntityButton(item, onOpenPlaylist) : null
       ]));
     });
+  }
+
+  function openEntityButton(item, onOpenPlaylist) {
+    return h('button', {
+      class: 'mb-search-entity__open',
+      type: 'button',
+      title: '\u6253\u5f00',
+      onclick: function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (item.playlistId && onOpenPlaylist) onOpenPlaylist(item.playlistId);
+      }
+    }, '\u6253\u5f00');
   }
 
   function actionButton(cls, title, icon, onclick) {

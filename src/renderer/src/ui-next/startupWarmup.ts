@@ -50,12 +50,12 @@ async function preloadStartupPlaylistCovers(): Promise<string> {
     const playlists = await libraryController.getPlaylists();
     const preload = playlistCoverManifest.preloadStableCoverMetadata(playlists as UINextPlaylistLike[]);
     if (preload.hits > 0) {
-        return `cover cache hits ${preload.hits}`;
+        return `封面缓存命中 ${preload.hits} 个`;
     }
     if (preload.scheduled > 0) {
-        return `queued cover checks ${preload.scheduled}`;
+        return `已排队检查封面 ${preload.scheduled} 个`;
     }
-    return 'cover cache ready';
+    return '歌单封面缓存已就绪';
 }
 
 function createTaskDefinitions(): StartupWarmupTaskDefinition[] {
@@ -120,15 +120,15 @@ function createTaskDefinitions(): StartupWarmupTaskDefinition[] {
         },
         {
             id: 'coverManifest',
-            label: 'Preload playlist cover metadata',
+            label: '预加载歌单封面',
             run: preloadStartupPlaylistCovers
         },
         {
             id: 'lyricsCacheIndex',
-            label: 'Warm lyrics cache index',
+            label: '预热歌词索引',
             run: async () => {
                 const warmed = cacheManager.warmLyricsCacheIndex();
-                return warmed > 0 ? `lyrics cache warmed ${warmed}` : 'lyrics cache index ready';
+                return warmed > 0 ? `歌词索引已预热 ${warmed} 项` : '歌词索引已就绪';
             }
         },
         {

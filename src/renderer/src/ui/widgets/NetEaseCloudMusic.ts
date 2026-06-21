@@ -26,6 +26,7 @@ class NetEaseCloudMusic extends Component {
     private importConfirmBtn: HTMLButtonElement | null = null;
     private importUndoBtn: HTMLButtonElement | null = null;
     private importAssetsBtn: HTMLButtonElement | null = null;
+    private importAssetsCancelBtn: HTMLButtonElement | null = null;
     private assetMigrationProgress: HTMLElement | null = null;
     private currentPlaylist: NetEasePlaylist | null = null;
     private isLoggedIn: boolean = false;
@@ -37,6 +38,7 @@ class NetEaseCloudMusic extends Component {
     private lastQRLoginDiagnosticsText = '';
     private pendingAssetMigrationPreview: NetEaseMigrationPreview | null = null;
     private isAssetMigrationRunning = false;
+    private assetMigrationCancelRequested = false;
     private lastAssetMigrationProgressRenderAt = 0;
     private pendingAssetMigrationProgressMessage = '';
     private pendingAssetMigrationProgressStatusText = '';
@@ -91,6 +93,7 @@ class NetEaseCloudMusic extends Component {
         this.importConfirmBtn = document.getElementById('netease-import-confirm-btn') as HTMLButtonElement;
         this.importUndoBtn = this.ensureImportUndoButton();
         this.importAssetsBtn = this.ensureImportAssetsButton();
+        this.importAssetsCancelBtn = this.ensureAssetMigrationCancelButton();
         this.assetMigrationProgress = this.ensureAssetMigrationProgress();
         this.qrDiagnosticsActions = this.ensureQRLoginDiagnosticsActions();
     }
@@ -112,6 +115,7 @@ class NetEaseCloudMusic extends Component {
         if (this.importConfirmBtn) this.importConfirmBtn.addEventListener('click', () => this.doImportPlaylist());
         if (this.importUndoBtn) this.importUndoBtn.addEventListener('click', () => this.undoLatestImport());
         if (this.importAssetsBtn) this.importAssetsBtn.addEventListener('click', () => this.openAssetMigration());
+        if (this.importAssetsCancelBtn) this.importAssetsCancelBtn.addEventListener('click', () => this.cancelAssetMigration());
 
         this.debouncedLookup = debounce(async (_query: string) => {
             await this.lookupPlaylist();
@@ -191,6 +195,18 @@ class NetEaseCloudMusic extends Component {
         this.showImportModal();
     }
 
+    showAssetMigrationProgressModal(): void {
+        this.showModal(this.importModal);
+        if (this.isAssetMigrationRunning) {
+            this.renderAssetMigrationProgress('网易云资产迁移正在后台进行，可在这里查看进度或取消。', {force: true});
+            this.setAssetMigrationCancelVisible(true);
+            this.importAssetsCancelBtn?.focus();
+            return;
+        }
+
+        this.renderAssetMigrationProgress('当前没有正在进行的网易云资产迁移。', {force: true});
+    }
+
     private ensureImportUndoButton(): HTMLButtonElement | null {
         const existing = document.getElementById('netease-import-undo-btn') as HTMLButtonElement | null;
         if (existing) return existing;
@@ -222,6 +238,37 @@ class NetEaseCloudMusic extends Component {
         button.textContent = '迁移全部资产';
         footer.insertBefore(button, this.importConfirmBtn || null);
         return button;
+    }
+
+    private ensureAssetMigrationCancelButton(): HTMLButtonElement | null {
+        const existing = document.getElementById('netease-import-assets-cancel-btn') as HTMLButtonElement | null;
+        if (existing) return existing;
+
+        const footer = this.importModal?.querySelector('.modal-footer');
+        if (!footer) return null;
+
+        const button = document.createElement('button');
+        button.id = 'netease-import-assets-cancel-btn';
+        button.type = 'button';
+        button.className = 'btn btn-secondary';
+        button.style.display = 'none';
+        button.textContent = '取消迁移';
+        footer.insertBefore(button, this.importAssetsBtn?.nextSibling || this.importConfirmBtn || null);
+        return button;
+    }
+
+    private setAssetMigrationCancelVisible(visible: boolean): void {
+        if (!this.importAssetsCancelBtn) return;
+        this.importAssetsCancelBtn.style.display = visible ? 'inline-flex' : 'none';
+        this.importAssetsCancelBtn.disabled = !visible;
+    }
+
+    private cancelAssetMigration(): void {
+        if (!this.isAssetMigrationRunning) return;
+        this.assetMigrationCancelRequested = true;
+        if (this.importAssetsCancelBtn) this.importAssetsCancelBtn.disabled = true;
+        this.renderAssetMigrationProgress('正在取消网易云资产迁移，当前批量写入完成后停止...', {force: true});
+        appNotificationService.showInfo('正在取消网易云资产迁移');
     }
 
     private ensureAssetMigrationProgress(): HTMLElement | null {
@@ -404,9 +451,35 @@ class NetEaseCloudMusic extends Component {
 
         const preflight = await netEaseAssetMigrationService.prepareMigrationPreflight();
         this.pendingAssetMigrationPreview = preflight.preview;
+        if (this.assetMigrationCancelRequested) {
+            await this.recordAssetMigrationCancelledReport(preflight.totalTracks);
+            this.renderAssetMigrationProgress('资产迁移已取消：预检完成前已收到取消请求', {force: true});
+            return false;
+        }
+
         this.renderAssetMigrationPreflight(preflight);
 
         return window.confirm(`\u51c6\u5907\u8fc1\u79fb ${preflight.estimatedPlaylists} \u4e2a\u6b4c\u5355\uff0c\u7ea6 ${preflight.totalTracks} \u9996\u6b4c\u66f2\u3002\u662f\u5426\u5f00\u59cb\uff1f`);
+    }
+
+    private async recordAssetMigrationCancelledReport(totalTracks = 0): Promise<void> {
+        const snapshot = await netEaseMigrationReportService.createSnapshot();
+        netEaseMigrationReportService.recordPlaylistImport({
+            externalId: 'asset-migration-cancelled',
+            playlistName: '[网易云] 资产迁移',
+            snapshot,
+            total: totalTracks,
+            added: 0,
+            existing: 0,
+            skipped: 0,
+            duplicates: 0,
+            failures: [{
+                songId: 'asset-migration-cancelled',
+                title: '网易云资产迁移',
+                reason: 'cancelled'
+            }],
+            status: 'cancelled'
+        });
     }
 
     private renderAssetMigrationPreflight(preflight: {
@@ -428,14 +501,19 @@ class NetEaseCloudMusic extends Component {
         }
 
         this.isAssetMigrationRunning = true;
+        this.assetMigrationCancelRequested = false;
         if (this.importAssetsBtn) this.importAssetsBtn.disabled = true;
         if (this.importConfirmBtn) this.importConfirmBtn.disabled = true;
+        this.setAssetMigrationCancelVisible(true);
         this.setImportUndoVisible(false);
         this.renderAssetMigrationProgress('正在准备网易云资产迁移...', {force: true});
 
         try {
             const confirmed = await this.prepareAssetMigrationPreflight();
             if (!confirmed || !this.pendingAssetMigrationPreview) {
+                if (this.assetMigrationCancelRequested) {
+                    await this.recordAssetMigrationCancelledReport();
+                }
                 this.renderAssetMigrationProgress('\u5df2\u53d6\u6d88\u7f51\u6613\u4e91\u8d44\u4ea7\u8fc1\u79fb', {force: true});
                 return;
             }
@@ -444,7 +522,22 @@ class NetEaseCloudMusic extends Component {
                 this.renderAssetMigrationProgress(assetMigrationProgress.message, {
                     statusText: `${assetMigrationProgress.label} ${assetMigrationProgress.current}/${assetMigrationProgress.total}`
                 });
+            }, {
+                isCancelled: () => this.assetMigrationCancelRequested
             });
+
+            if (summary.cancelled) {
+                const message = `资产迁移已取消：已导入歌单 ${summary.importedPlaylists} 个，新增 ${summary.importedTracks} 首，已存在 ${summary.existingTracks} 首，跳过 ${summary.skippedTracks} 首`;
+                if (this.importStatus) {
+                    this.importStatus.style.display = 'block';
+                    this.importStatus.textContent = message;
+                }
+                this.renderAssetMigrationProgress(message, {force: true});
+                appNotificationService.showInfo(message);
+                libraryController.emitLibraryUpdated([]);
+                this.emit('playlistImported', {assetMigration: true, cancelled: true});
+                return;
+            }
 
             if (!summary.success && summary.error) {
                 if (this.importStatus) {
@@ -481,6 +574,8 @@ class NetEaseCloudMusic extends Component {
             this.pendingAssetMigrationProgressMessage = '';
             this.pendingAssetMigrationProgressStatusText = '';
             this.isAssetMigrationRunning = false;
+            this.assetMigrationCancelRequested = false;
+            this.setAssetMigrationCancelVisible(false);
             if (this.importAssetsBtn) this.importAssetsBtn.disabled = false;
             if (this.importConfirmBtn) this.importConfirmBtn.disabled = !this.currentPlaylist;
             this.pendingAssetMigrationPreview = null;

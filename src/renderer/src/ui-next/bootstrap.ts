@@ -349,7 +349,7 @@ function renderStartupError(error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
     root.innerHTML = [
         '<div style="padding:32px;font:14px/1.5 system-ui;color:#d54b62">',
-        'MusicBox 新 UI 启动失败：',
+        'Auralux 启动失败：',
         message,
         '</div>'
     ].join('');

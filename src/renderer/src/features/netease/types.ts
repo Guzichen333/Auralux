@@ -34,6 +34,11 @@ export interface NetEaseMigrationProgress {
     current: number;
     total: number;
     message: string;
+    phase?: 'preflight' | 'fetching' | 'writing' | 'refreshing' | 'completed' | 'cancelled' | 'failed';
+}
+
+export interface NetEaseMigrationControl {
+    isCancelled(): boolean;
 }
 
 export interface NetEasePlaylist {

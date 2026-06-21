@@ -2,7 +2,7 @@ import {libraryDataService} from '@/features/library/service/LibraryDataService'
 import {cacheManager} from '@/shared/cache/CacheManager';
 
 export type NetEaseMigrationReportKind = 'playlist-import' | 'playlist-sync';
-export type NetEaseMigrationReportStatus = 'completed' | 'partial' | 'failed' | 'synced' | 'undone';
+export type NetEaseMigrationReportStatus = 'completed' | 'partial' | 'failed' | 'synced' | 'undone' | 'cancelled';
 
 export interface NetEaseMigrationSnapshot {
     playlistCount: number;

@@ -13,6 +13,22 @@ import type {TrackMetadata} from '../types/global';
 const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.wma', '.ape'];
 const BATCH_SIZE = 10;
 
+interface BulkVirtualTrackInput {
+    filePath: string;
+    title?: string;
+    artist?: string;
+    album?: string;
+    duration?: number;
+    bitrate?: number;
+    sampleRate?: number;
+    year?: number;
+    genre?: string;
+    track?: number;
+    disc?: number;
+    embeddedLyrics?: string;
+    cover?: string | null;
+}
+
 function getNeteaseSongIdFromPath(filePath: unknown): string | null {
     if (typeof filePath !== 'string') return null;
 
@@ -669,6 +685,107 @@ export class LibraryController extends BaseController {
     async addToPlaylist(playlistId: string, trackFileIds: string | string[]): Promise<any> {
         const trackIds = Array.isArray(trackFileIds) ? trackFileIds : [trackFileIds];
         return this.addTracksToPlaylist(playlistId, trackIds);
+    }
+
+    @IpcHandle('library:bulkImportVirtualTracksToPlaylist')
+    async bulkImportVirtualTracksToPlaylist(playlistId: string, tracks: BulkVirtualTrackInput[]): Promise<any> {
+        try {
+            if (!Array.isArray(tracks)) {
+                return {success: false, error: 'tracks must be an array'};
+            }
+
+            const playlist = this.libraryCacheManager.getPlaylistById(playlistId);
+            if (!playlist) {
+                return {success: false, error: 'playlist not found'};
+            }
+
+            if (!Array.isArray(playlist.trackIds)) playlist.trackIds = [];
+            const allTracks = this.libraryCacheManager.getAllTracks();
+            const byPath = new Map(allTracks.map((track: any) => [track.filePath, track]));
+            const playlistTrackIds = new Set(playlist.trackIds);
+            const results: any[] = [];
+            let changed = false;
+
+            for (const audioFile of tracks) {
+                try {
+                    if (!audioFile || typeof audioFile.filePath !== 'string' || !audioFile.filePath.startsWith('netease://')) {
+                        results.push({success: false, error: 'invalid virtual track path', filePath: audioFile?.filePath});
+                        continue;
+                    }
+
+                    let cacheTrack = byPath.get(audioFile.filePath);
+                    let isNew = false;
+                    if (!cacheTrack) {
+                        const trackData: any = {
+                            title: audioFile.title,
+                            artist: audioFile.artist,
+                            album: audioFile.album,
+                            duration: audioFile.duration,
+                            bitrate: audioFile.bitrate,
+                            sampleRate: audioFile.sampleRate,
+                            year: audioFile.year,
+                            genre: audioFile.genre,
+                            track: audioFile.track,
+                            disc: audioFile.disc,
+                            embeddedLyrics: audioFile.embeddedLyrics,
+                            cover: audioFile.cover,
+                            source: 'netease',
+                            isVirtual: true,
+                            libraryVisible: false
+                        };
+                        const virtualStats: any = {
+                            size: 0,
+                            mtime: new Date(),
+                            isFile: true,
+                            isDirectory: false
+                        };
+                        cacheTrack = this.libraryCacheManager.addTrack(trackData, audioFile.filePath, virtualStats);
+                        byPath.set(audioFile.filePath, cacheTrack);
+                        isNew = true;
+                        changed = true;
+                    }
+
+                    const fileId = cacheTrack?.fileId;
+                    if (!fileId) {
+                        results.push({success: false, error: 'missing file id', filePath: audioFile.filePath});
+                        continue;
+                    }
+
+                    const alreadyInPlaylist = playlistTrackIds.has(fileId);
+                    if (!alreadyInPlaylist) {
+                        playlist.trackIds.push(fileId);
+                        playlistTrackIds.add(fileId);
+                        playlist.updatedAt = Date.now();
+                        changed = true;
+                    }
+
+                    results.push({
+                        success: true,
+                        track: cacheTrack,
+                        fileId,
+                        isNew,
+                        playlistAdded: !alreadyInPlaylist,
+                        duplicate: alreadyInPlaylist
+                    });
+                } catch (error: any) {
+                    results.push({
+                        success: false,
+                        error: error?.message || 'bulk import failed',
+                        filePath: audioFile?.filePath
+                    });
+                }
+            }
+
+            if (changed) {
+                await this.libraryCacheManager.saveCache();
+                const win = this.windowManager.getMainWindow();
+                if (win) win.webContents.send('library:updated', this.libraryCacheManager.getAllTracks());
+            }
+
+            return {success: true, results};
+        } catch (error: any) {
+            return {success: false, error: error.message};
+        }
     }
 
     @IpcHandle('library:removeFromPlaylist')

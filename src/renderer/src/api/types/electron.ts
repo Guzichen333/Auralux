@@ -90,6 +90,7 @@ export interface ElectronLibraryAPI {
     scanSingleFile(networkPath: string): Promise<unknown>;
     scanDirectoryForFiles(path: string): Promise<{success: boolean; files: unknown[]; error?: string}>;
     addTrackToLibrary(audioFile: Partial<Track> | unknown): Promise<{success: boolean; track?: Track; error?: string; isNew?: boolean}>;
+    bulkImportVirtualTracksToPlaylist(playlistId: string, tracks: Array<Partial<Track>>): Promise<{success: boolean; results?: any[]; error?: string}>;
     getTracks(options?: GetTracksOptions): Promise<Track[]>;
     getPlaylists(): Promise<Playlist[]>;
     search(query: string): Promise<Track[]>;

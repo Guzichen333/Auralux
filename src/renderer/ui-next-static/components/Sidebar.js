@@ -45,7 +45,7 @@
         ]),
         h('div', { class: 'mb-brand__name' }, [
           h('span', {}, 'Auralux'),
-          h('span', { class: 'mb-brand__ver' }, 'UI-NEXT')
+          h('span', { class: 'mb-brand__ver' }, '聆曜')
         ])
       ]),
 
