@@ -43,7 +43,7 @@ Auralux 仍处于积极开发阶段。当前主要开发方向集中在：
 - UI：UI-NEXT static shell + renderer adapter
 - 音频：Rust N-API native audio engine、WASAPI、WebAudio fallback
 - 云端能力：NeteaseCloudMusicApi 本地服务
-- 辅助工具：Python metadata helper、GitNexus、focused verify scripts
+- 辅助工具：Python metadata helper、focused verify scripts
 
 ### 项目结构
 
@@ -171,7 +171,7 @@ Auralux is under active development. Current work mainly focuses on:
 - UI: UI-NEXT static shell plus renderer adapter
 - Audio: Rust N-API native audio engine, WASAPI, and WebAudio fallback
 - Cloud integration: local NeteaseCloudMusicApi service
-- Tooling: Python metadata helper, GitNexus, focused verification scripts
+- Tooling: Python metadata helper, focused verification scripts
 
 ### Project Structure
 

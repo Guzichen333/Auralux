@@ -23,6 +23,10 @@ output/
 .gitnexus/
 AGENTS.md
 CLAUDE.md
+CODEX_HANDOFF.md
+docs/progress/
+docs/superpowers/
+src/renderer/src/extensions/examples/*.zip
 dosdel.bat
 *.log
 *.zip

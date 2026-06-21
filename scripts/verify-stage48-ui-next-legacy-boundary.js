@@ -44,8 +44,4 @@ const uiNextShell = read('src/renderer/ui-next-static/NewMusicShell.js');
 assertNotIncludes(uiNextShell, '旧界面', 'UI-NEXT must not offer a visible legacy UI switch');
 assertNotIncludes(uiNextShell, '返回旧界面', 'UI-NEXT must not offer return-to-legacy copy');
 
-const progress = read('docs/progress/auralux-next-stage.md');
-assertIncludes(progress, 'Stage 48', 'progress log must record Stage 48 legacy boundary');
-assertIncludes(progress, 'old UI runtime remains compatibility-only', 'progress log must document why old runtime is not deleted wholesale');
-
 console.log('Stage 48 UI-NEXT legacy boundary guard passed.');
