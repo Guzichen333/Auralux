@@ -26,6 +26,11 @@ CLAUDE.md
 CODEX_HANDOFF.md
 docs/progress/
 docs/superpowers/
+paper/
+scripts/benchmarks/
+scripts/verify-*.js
+electron-builder.win-test.yml
+src/renderer/src/extensions/examples/
 src/renderer/src/extensions/examples/*.zip
 dosdel.bat
 *.log

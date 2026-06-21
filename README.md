@@ -43,7 +43,7 @@ Auralux 仍处于积极开发阶段。当前主要开发方向集中在：
 - UI：UI-NEXT static shell + renderer adapter
 - 音频：Rust N-API native audio engine、WASAPI、WebAudio fallback
 - 云端能力：NeteaseCloudMusicApi 本地服务
-- 辅助工具：Python metadata helper、focused verify scripts
+- 辅助工具：Python metadata helper
 
 ### 项目结构
 
@@ -54,8 +54,8 @@ src/renderer/ui-next-static/
                           UI-NEXT 静态界面入口和组件
 src/renderer/src/ui-next/ UI-NEXT 与原 MusicBox 运行时的适配层
 native/                   Rust N-API 音频引擎
-scripts/                  构建脚本和专项验证脚本
-docs/                     架构文档、阶段计划和开发记录
+scripts/                  构建和资源同步脚本
+docs/                     架构与使用文档
 build/                    打包图标和 Electron Builder 配置
 ```
 
@@ -86,14 +86,6 @@ npm run dev:renderer
 
 ```bash
 npm run build
-```
-
-常用验证：
-
-```bash
-node scripts/verify-auralux-stage35-quality-gate.js
-npm run typecheck:renderer
-npm run build:renderer
 ```
 
 ### 使用说明
@@ -171,7 +163,7 @@ Auralux is under active development. Current work mainly focuses on:
 - UI: UI-NEXT static shell plus renderer adapter
 - Audio: Rust N-API native audio engine, WASAPI, and WebAudio fallback
 - Cloud integration: local NeteaseCloudMusicApi service
-- Tooling: Python metadata helper, focused verification scripts
+- Tooling: Python metadata helper
 
 ### Project Structure
 
@@ -182,8 +174,8 @@ src/renderer/ui-next-static/
                           UI-NEXT static shell and components
 src/renderer/src/ui-next/ UI-NEXT adapter layer over the MusicBox runtime
 native/                   Rust N-API audio engine
-scripts/                  Build helpers and focused verification scripts
-docs/                     Architecture docs, stage plans, and development notes
+scripts/                  Build and asset synchronization helpers
+docs/                     Architecture and usage documentation
 build/                    Packaging assets and Electron Builder config
 ```
 
@@ -214,14 +206,6 @@ Build the app:
 
 ```bash
 npm run build
-```
-
-Useful verification commands:
-
-```bash
-node scripts/verify-auralux-stage35-quality-gate.js
-npm run typecheck:renderer
-npm run build:renderer
 ```
 
 ### Usage Notes
