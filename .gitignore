@@ -19,7 +19,10 @@ output/
 
 .claude
 .codex
+.agents/
 .gitnexus/
+AGENTS.md
+CLAUDE.md
 dosdel.bat
 *.log
 *.zip
