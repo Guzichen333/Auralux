@@ -12,10 +12,21 @@ interface TraySettings {
     startMinimized: boolean;
 }
 
+type TrayPlayMode = 'sequence' | 'shuffle' | 'repeat-one';
+
+interface TrayPlaybackState {
+    title?: string;
+    artist?: string;
+    isPlaying?: boolean;
+    liked?: boolean;
+    playMode?: TrayPlayMode;
+}
+
 @Controller('tray')
 export class TrayController extends BaseController {
     private tray: Tray | null = null;
     private settings: TraySettings = {enabled: true, closeToTray: false, startMinimized: false};
+    private playbackState: TrayPlaybackState = {title: '', artist: '', isPlaying: false, liked: false, playMode: 'sequence'};
     private settingsFilePath: string;
 
     constructor(private windowManager: WindowManager) {
@@ -52,8 +63,48 @@ export class TrayController extends BaseController {
     private updateTrayMenu(): void {
         if (!this.tray) return;
         const menu = Menu.buildFromTemplate([
+            {label: this.getTrayTrackTitle(), enabled: false},
             {type: 'separator'},
-            {label: '显示主窗口', click: () => this.showMainWindow()},
+            {label: '上一首', click: () => this.sendTrayAction('tray:previous')},
+            {label: this.playbackState.isPlaying ? '暂停' : '播放/暂停', click: () => this.sendTrayAction('tray:play-pause')},
+            {label: '下一首', click: () => this.sendTrayAction('tray:next')},
+            {label: this.playbackState.liked ? '取消喜欢' : '喜欢', click: () => this.sendTrayAction('tray:favorite')},
+            {type: 'separator'},
+            {
+                label: '列表循环',
+                submenu: [
+                    {
+                        label: '顺序播放',
+                        type: 'radio',
+                        checked: this.playbackState.playMode === 'sequence',
+                        click: () => this.sendTrayAction('tray:set-play-mode', 'sequence')
+                    },
+                    {
+                        label: '随机播放',
+                        type: 'radio',
+                        checked: this.playbackState.playMode === 'shuffle',
+                        click: () => this.sendTrayAction('tray:set-play-mode', 'shuffle')
+                    },
+                    {
+                        label: '单曲循环',
+                        type: 'radio',
+                        checked: this.playbackState.playMode === 'repeat-one',
+                        click: () => this.sendTrayAction('tray:set-play-mode', 'repeat-one')
+                    }
+                ]
+            },
+            {
+                label: '完整模式',
+                submenu: [
+                    {label: '打开完整模式', click: () => this.showMainWindow()},
+                    {label: '沉浸播放', click: () => this.sendTrayAction('tray:open-immersive')}
+                ]
+            },
+            {type: 'separator'},
+            {label: '打开音乐桌面', click: () => this.showMainWindow()},
+            {label: '打开桌面歌词', click: () => this.sendTrayAction('tray:open-desktop-lyrics')},
+            {type: 'separator'},
+            {label: '设置', click: () => this.sendTrayAction('tray:open-settings')},
             {type: 'separator'},
             {
                 label: '退出', click: () => {
@@ -63,6 +114,19 @@ export class TrayController extends BaseController {
             }
         ]);
         this.tray.setContextMenu(menu);
+    }
+
+    private getTrayTrackTitle(): string {
+        const title = (this.playbackState.title || '').trim();
+        const artist = (this.playbackState.artist || '').trim();
+        if (!title) {
+            return '暂无播放';
+        }
+        return artist ? `${title} - ${artist}` : title;
+    }
+
+    private sendTrayAction(channel: string, payload?: unknown): void {
+        this.windowManager.sendToMainWindow(channel, payload);
     }
 
     private showMainWindow(): void {
@@ -132,6 +196,18 @@ export class TrayController extends BaseController {
             await this.saveTraySettings();
             if (settings.enabled === false) this.destroyTrayInstance();
             else if (settings.enabled === true && !this.tray) await this.createTrayInstance();
+            this.updateTrayMenu();
+            return {success: true};
+        } catch (error: any) {
+            return {success: false, error: error.message};
+        }
+    }
+
+    @IpcHandle('tray:updatePlaybackState')
+    updatePlaybackState(state: TrayPlaybackState): { success: boolean; error?: string } {
+        try {
+            this.playbackState = {...this.playbackState, ...state};
+            this.updateTrayMenu();
             return {success: true};
         } catch (error: any) {
             return {success: false, error: error.message};

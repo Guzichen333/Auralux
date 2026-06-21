@@ -18,6 +18,14 @@ class TrayGateway extends ElectronNamespaceAdapter<'tray'> {
         return this.call('updateSettings', settings);
     }
 
+    updatePlaybackState(state: unknown): Promise<void> {
+        return this.call('updatePlaybackState', state);
+    }
+
+    onAction(handler: (action: string, payload?: unknown) => void): Unsubscribe {
+        return this.on('onAction', handler);
+    }
+
     onQuit(handler: () => void): Unsubscribe {
         return this.on('onQuit', handler);
     }

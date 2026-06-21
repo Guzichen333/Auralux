@@ -1,7 +1,7 @@
 import {systemShellService, updateService} from "@/features/appShell/service";
 
 class AppInfoSettingsService {
-    private readonly repositoryUrl = '';
+    private readonly repositoryUrl = 'https://github.com/Guzichen333/Auralux';
 
     async updateVersionInfo(versionElementId = 'app-version-info'): Promise<void> {
         const versionElement = document.getElementById(versionElementId);

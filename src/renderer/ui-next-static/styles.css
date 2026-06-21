@@ -739,10 +739,15 @@ body.ui-next-app #netease-import-modal .btn:disabled,
   justify-content: center;
   border: 1px solid rgba(255,255,255,.14);
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--mb-coral), var(--mb-cyan));
-  color: #fff;
-  font-size: 24px;
-  font-weight: 850;
+  background: color-mix(in srgb, var(--mb-bg-elevated) 72%, transparent);
+  box-shadow: 0 18px 50px rgba(0,0,0,.24), inset 0 0 0 1px rgba(255,255,255,.06);
+  animation: mbStartupLogoPulse 1800ms ease-out infinite;
+}
+.mb-startup__logo {
+  width: 34px;
+  height: 34px;
+  display: block;
+  object-fit: contain;
 }
 .mb-startup__title {
   color: var(--mb-text);
@@ -765,7 +770,9 @@ body.ui-next-app #netease-import-modal .btn:disabled,
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--mb-coral), var(--mb-cyan));
+  background-size: 180% 100%;
   transition: width .22s ease-out;
+  animation: mbStartupBarFlow 1400ms ease-out infinite;
 }
 .mb-startup__tasks {
   display: grid;
@@ -789,6 +796,7 @@ body.ui-next-app #netease-import-modal .btn:disabled,
 .mb-startup__task.is-running .mb-startup__dot {
   background: var(--mb-cyan);
   box-shadow: 0 0 14px rgba(60,199,224,.48);
+  animation: mbStartupDotPulse 900ms ease-out infinite;
 }
 .mb-startup__task.is-done .mb-startup__dot {
   background: var(--mb-teal);
@@ -807,6 +815,29 @@ body.ui-next-app #netease-import-modal .btn:disabled,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@keyframes mbStartupLogoPulse {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-1px) scale(1.035); }
+}
+
+@keyframes mbStartupBarFlow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 180% 50%; }
+}
+
+@keyframes mbStartupDotPulse {
+  0%, 100% { transform: scale(1); opacity: .72; }
+  50% { transform: scale(1.45); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-startup__mark,
+  .mb-startup__bar-fill,
+  .mb-startup__task.is-running .mb-startup__dot {
+    animation: none;
+  }
 }
 .mb-startup-error {
   position: fixed;

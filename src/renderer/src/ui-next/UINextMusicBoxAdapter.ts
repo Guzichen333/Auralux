@@ -8,7 +8,7 @@ import {netEaseApiClient, netEaseAuthService, netEaseLocalMatchService, netEaseM
 import type {NetEaseLocalMatch, NetEaseLocalMatchStatus} from '@/features/netease/service';
 import type {NetEaseMigrationReport} from '@/features/netease/service/NetEaseMigrationReportService';
 import type {NetEasePlaylistSyncState} from '@/features/netease/service/NetEaseSyncStateService';
-import {appFileImportActionService, appModalService, trayShellService} from '@/features/appShell/service';
+import {appFileImportActionService, appModalService, trayShellService, updateService} from '@/features/appShell/service';
 import {desktopLyricsService} from '@/features/desktopLyrics/service';
 import {lyricsContentService} from '@/features/mediaAssets/service/LyricsContentService';
 import {windowGateway} from '@/infrastructure/electron';
@@ -33,6 +33,7 @@ import type {CreatePlaylistDialog} from '@ui/dialogs/CreatePlaylistDialog';
 import type {PlaybackStoreChange} from '@/features/playback/PlaybackStore';
 import type {MusicBoxSettings} from '@api/types/settings';
 import type {LyricLine} from '@api/types/lyrics';
+import type {PlayMode} from '@api/types/playback';
 
 type UINextSource = 'local' | 'netease';
 type UINextSearchFilter = 'all' | 'songs' | 'artists' | 'albums' | 'playlists';
@@ -377,6 +378,8 @@ export class UINextMusicBoxAdapter {
         });
         this.loadSettingsSnapshot();
         this.syncPlaybackState();
+        this.bindTrayActions();
+        void this.syncTrayPlaybackState();
         this.loadLibrarySnapshot();
         this.syncNetEaseStatus(0, {force: true});
 
@@ -386,6 +389,7 @@ export class UINextMusicBoxAdapter {
             }
 
             this.syncPlaybackState();
+            void this.syncTrayPlaybackState();
             void this.syncDesktopLyricsForChange(change);
             if (change.type === 'trackChanged' && this.shell.state.view === 'immersive-player') {
                 this.shell._resetImmersiveVisualizerState?.();
@@ -417,6 +421,42 @@ export class UINextMusicBoxAdapter {
             }
             this.useCoverImmersiveBackground();
         };
+    }
+
+    private bindTrayActions(): void {
+        window.electronAPI?.tray?.onAction?.((action: string, payload?: unknown) => {
+            switch (action) {
+                case 'tray:previous':
+                    this.previousTrack();
+                    break;
+                case 'tray:play-pause':
+                    void playbackController.toggleCurrentPlayback();
+                    break;
+                case 'tray:next':
+                    this.nextTrack();
+                    break;
+                case 'tray:favorite':
+                    if (this.shell.state.currentTrack) {
+                        this.toggleLike(this.shell.state.currentTrack);
+                    }
+                    break;
+                case 'tray:set-play-mode':
+                    playbackController.setPlayMode(payload as PlayMode);
+                    this.syncPlaybackState();
+                    void this.syncTrayPlaybackState();
+                    this.shell.render();
+                    break;
+                case 'tray:open-immersive':
+                    this.openImmersivePlayer();
+                    break;
+                case 'tray:open-desktop-lyrics':
+                    void this.toggleDesktopLyrics();
+                    break;
+                case 'tray:open-settings':
+                    this.openSettings();
+                    break;
+            }
+        });
     }
 
     search(query: string): void {
@@ -1424,9 +1464,24 @@ export class UINextMusicBoxAdapter {
         showToast('正在检查更新...', 'info', 1600);
         try {
             await appInfoSettingsService.updateVersionInfo();
+            const result = await updateService.checkForUpdates({fallbackCurrentVersion: true});
+            if (result.hasUpdate) {
+                const versionText = result.latestVersion ? ` v${result.latestVersion}` : '';
+                showToast(`发现新版本${versionText}，正在打开发布页`, 'success', 2600);
+                const openResult = await updateService.openReleasePage(result.releaseInfo?.html_url || updateService.getFallbackReleaseUrl());
+                if (!openResult.success) {
+                    showToast(openResult.error || '打开发布页失败', 'error', 2200);
+                }
+                return;
+            }
+            const currentVersion = result.currentVersion || result.latestVersion || 'unknown';
+            showToast(`当前已是最新版本 v${currentVersion}`, 'success', 2200);
         } catch (error) {
             console.error('[ui-next] checkUpdates failed', error);
-            showToast('检查更新失败', 'error', 2200);
+            const message = error instanceof Error && error.message
+                ? error.message
+                : '检查更新失败';
+            showToast(message, 'error', 3200);
         }
     }
 
@@ -1819,6 +1874,13 @@ export class UINextMusicBoxAdapter {
             favorite: !track.liked
         }).then(() => {
             showToast(!track.liked ? '已收藏' : '已取消收藏', 'info');
+            if (this.shell.state.currentTrack?.id === track.id) {
+                this.shell.state.currentTrack = {
+                    ...this.shell.state.currentTrack,
+                    liked: !track.liked
+                };
+                void this.syncTrayPlaybackState();
+            }
             return this.requestLibrarySnapshotRefresh();
         }).catch((error) => {
             console.error('[ui-next] toggleLike failed', error);
@@ -2701,6 +2763,17 @@ export class UINextMusicBoxAdapter {
             tracks: queue,
             currentIndex: state.currentIndex
         };
+    }
+
+    private async syncTrayPlaybackState(): Promise<void> {
+        const track = this.shell.state.currentTrack;
+        await window.electronAPI?.tray?.updatePlaybackState?.({
+            title: track?.title || '',
+            artist: track?.artist || '',
+            isPlaying: Boolean(this.shell.state.isPlaying),
+            liked: Boolean(track?.liked),
+            playMode: playbackController.getPlayMode()
+        });
     }
 
     private applyLightweightPlaybackUpdate(change: PlaybackStoreChange): boolean {

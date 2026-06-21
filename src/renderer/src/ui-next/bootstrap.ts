@@ -144,7 +144,7 @@ function renderStartupSplash(root: HTMLElement, tasks: StartupWarmupTaskState[] 
     splash.innerHTML = [
         '<div class="mb-startup__inner">',
         '<div class="mb-startup__brand">',
-        '<div class="mb-startup__mark">A</div>',
+        '<div class="mb-startup__mark"><img class="mb-startup__logo" src="assets/images/favicon.svg" alt="Auralux"></div>',
         '<div>',
         '<div class="mb-startup__title">Auralux</div>',
         '<div class="mb-startup__subtitle">正在准备你的音乐空间</div>',

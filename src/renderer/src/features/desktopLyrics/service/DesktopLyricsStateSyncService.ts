@@ -53,9 +53,12 @@ export class DesktopLyricsStateSyncService {
             if (result.success && result.lyrics.length > 0) {
                 await this.syncToDesktopLyrics('lyrics', result.lyrics);
                 console.log(`🎵 loadLyricsForDesktop: 歌词已同步，来源=${result.source || 'unknown'}`);
+            } else {
+                await this.syncNoLyrics();
             }
         } catch (error) {
             console.error('❌ 为桌面歌词加载歌词失败:', error);
+            await this.syncNoLyrics();
         }
     }
 
@@ -73,7 +76,10 @@ export class DesktopLyricsStateSyncService {
                     await this.loadLyricsForDesktop(currentTrack);
                 } else {
                     console.log('🔄 syncCurrentStateToDesktopLyrics: 无法加载歌词，缺少 title 或 artist');
+                    await this.syncNoLyrics();
                 }
+            } else {
+                await this.syncNoLyrics();
             }
 
             await this.syncToDesktopLyrics('playbackState', {
@@ -93,6 +99,12 @@ export class DesktopLyricsStateSyncService {
             await desktopLyricsGateway.updateLyrics(track.lyrics);
         } else if (track && track.title && track.artist) {
             await this.loadLyricsForDesktop(track);
+        } else {
+            await this.syncNoLyrics();
         }
+    }
+
+    private async syncNoLyrics(): Promise<void> {
+        await desktopLyricsGateway.updateLyrics('暂无歌词');
     }
 }

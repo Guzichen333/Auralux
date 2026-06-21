@@ -395,10 +395,12 @@ class Settings extends Component {
         this.initializeExclusiveModeSettings();
 
         // 初始化系统托盘设置
-        this.systemTrayToggle.checked = initialValues.systemTray;
+        if (this.systemTrayToggle) {
+            this.systemTrayToggle.checked = true;
+        }
         this.trayCloseBehaviorSelect.value = initialValues.trayCloseBehavior;
         this.trayStartMinimizedToggle.checked = initialValues.trayStartMinimized;
-        traySettingsController.toggleSettings(this.getTraySettingsElements(), this.systemTrayToggle.checked);
+        traySettingsController.toggleSettings(this.getTraySettingsElements(), true);
 
         // 初始化媒体目录
         settingsToolsController.initializeLyricsDirectory(this.settings, this.getSettingsToolsElements());

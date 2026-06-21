@@ -525,7 +525,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
         create: () => ipcRenderer.invoke('tray:create'),
         destroy: () => ipcRenderer.invoke('tray:destroy'),
         updateSettings: (settings: any) => ipcRenderer.invoke('tray:updateSettings', settings),
+        updatePlaybackState: (state: any) => ipcRenderer.invoke('tray:updatePlaybackState', state),
         getSettings: () => ipcRenderer.invoke('tray:getSettings'),
+        onAction: (callback: (action: string, payload?: any) => void) => {
+            const channels = [
+                'tray:previous',
+                'tray:play-pause',
+                'tray:next',
+                'tray:favorite',
+                'tray:set-play-mode',
+                'tray:open-immersive',
+                'tray:open-desktop-lyrics',
+                'tray:open-settings'
+            ];
+            const wrappers = channels.map((channel) => {
+                const wrapper = (_event: any, payload?: any) => callback(channel, payload);
+                ipcRenderer.on(channel, wrapper);
+                return {channel, wrapper};
+            });
+            return () => {
+                wrappers.forEach(({channel, wrapper}) => ipcRenderer.removeListener(channel, wrapper));
+            };
+        },
         // 监听托盘退出事件
         onQuit: (callback: (...args: any[]) => void) => {
             ipcRenderer.on('tray:quit', callback);

@@ -14,22 +14,16 @@ export class TrayShellService {
     async initSystemTray(): Promise<void> {
         try {
             const settings = cacheManager.getLocalCache<Record<string, unknown>>('musicbox-settings') || {};
-            const trayEnabled = Object.prototype.hasOwnProperty.call(settings, 'systemTray')
-                ? settings.systemTray
-                : true;
-
-            if (trayEnabled) {
-                await trayGateway.create();
-                await trayGateway.updateSettings({
-                    enabled: true,
-                    closeToTray: Object.prototype.hasOwnProperty.call(settings, 'trayCloseBehavior')
-                        ? settings.trayCloseBehavior === 'minimize'
-                        : false,
-                    startMinimized: Object.prototype.hasOwnProperty.call(settings, 'trayStartMinimized')
-                        ? Boolean(settings.trayStartMinimized)
-                        : false
-                });
-            }
+            await trayGateway.create();
+            await trayGateway.updateSettings({
+                enabled: true,
+                closeToTray: Object.prototype.hasOwnProperty.call(settings, 'trayCloseBehavior')
+                    ? settings.trayCloseBehavior === 'minimize'
+                    : false,
+                startMinimized: Object.prototype.hasOwnProperty.call(settings, 'trayStartMinimized')
+                    ? Boolean(settings.trayStartMinimized)
+                    : false
+            });
 
             if (!this.quitUnsubscribe) {
                 this.quitUnsubscribe = trayGateway.onQuit(() => {
@@ -42,7 +36,7 @@ export class TrayShellService {
     }
 
     async updateSettings(settings: TraySettings): Promise<void> {
-        await trayGateway.updateSettings(settings);
+        await trayGateway.updateSettings({...settings, enabled: true});
     }
 }
 

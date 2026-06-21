@@ -2228,11 +2228,10 @@
         h('div', { class: 'mb-settings-panel' }, [
           h('div', { class: 'mb-settings-panel__head' }, [
             h('span', { class: 'mb-settings-panel__title' }, '\u7cfb\u7edf\u6258\u76d8'),
-            h('span', { class: 'mb-settings-panel__hint' }, '\u4fdd\u5b58\u540e\u7acb\u5373\u540c\u6b65\u5230 Electron \u6258\u76d8')
+            h('span', { class: 'mb-settings-panel__hint' }, '\u9ed8\u8ba4\u5e38\u9a7b\uff0c\u53ef\u8c03\u6574\u7a97\u53e3\u884c\u4e3a')
           ]),
-          settingToggle('\u542f\u7528\u7cfb\u7edf\u6258\u76d8', '\u5728\u7cfb\u7edf\u6258\u76d8\u4e2d\u4fdd\u7559 Auralux \u5165\u53e3\u3002', settings.systemTray, 'systemTray'),
-          settings.systemTray === false ? null : settingSelect('\u5173\u95ed\u7a97\u53e3\u65f6', '\u9009\u62e9\u70b9\u51fb\u5173\u95ed\u6309\u94ae\u540e\u7684\u884c\u4e3a\u3002', settings.trayCloseBehavior, 'trayCloseBehavior'),
-          settings.systemTray === false ? null : settingToggle('\u542f\u52a8\u65f6\u6700\u5c0f\u5316', '\u6253\u5f00\u8f6f\u4ef6\u540e\u76f4\u63a5\u8fdb\u5165\u6258\u76d8\u72b6\u6001\u3002', settings.trayStartMinimized, 'trayStartMinimized')
+          settingSelect('\u5173\u95ed\u7a97\u53e3\u65f6', '\u9009\u62e9\u70b9\u51fb\u5173\u95ed\u6309\u94ae\u540e\u7684\u884c\u4e3a\u3002', settings.trayCloseBehavior, 'trayCloseBehavior'),
+          settingToggle('\u542f\u52a8\u65f6\u6700\u5c0f\u5316', '\u6253\u5f00\u8f6f\u4ef6\u540e\u76f4\u63a5\u8fdb\u5165\u6258\u76d8\u72b6\u6001\u3002', settings.trayStartMinimized, 'trayStartMinimized')
         ]),
         h('div', { class: 'mb-settings-grid' }, [
           action('\u7f51\u6613\u4e91\u767b\u5f55', '\u6253\u5f00\u626b\u7801\u6216\u624b\u673a\u53f7\u767b\u5f55\u7a97\u53e3', function () {

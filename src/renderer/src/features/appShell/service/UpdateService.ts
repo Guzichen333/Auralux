@@ -28,7 +28,7 @@ interface PackageInfo {
 }
 
 class UpdateService {
-    private readonly githubRepo = '';
+    private readonly githubRepo = 'Guzichen333/Auralux';
     private readonly githubApiUrl = this.githubRepo
         ? `https://api.github.com/repos/${this.githubRepo}/releases/latest`
         : '';
@@ -85,6 +85,9 @@ class UpdateService {
         const response = await fetch(this.githubApiUrl);
 
         if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error('未找到 Auralux GitHub Release，请先发布 Release 后再检查更新。');
+            }
             throw new Error(`GitHub API请求失败: ${response.status} ${response.statusText}`);
         }
 

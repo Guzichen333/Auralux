@@ -220,6 +220,8 @@ interface ElectronAPI {
         create: () => Promise<void>;
         destroy: () => Promise<void>;
         updateSettings: (settings: any) => Promise<void>;
+        updatePlaybackState: (state: any) => Promise<void>;
+        onAction: (callback: (action: string, payload?: any) => void) => () => void;
         onQuit: (callback: () => void) => void;
     };
 
