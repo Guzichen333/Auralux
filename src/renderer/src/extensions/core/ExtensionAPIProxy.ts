@@ -120,7 +120,6 @@ const API_PERMISSION_MAP: Record<string, string> = {
     'system.getTempPath': Permissions.SYSTEM_INFO,
     'system.getLanguage': Permissions.SYSTEM_INFO,
     'system.getEnv': Permissions.SYSTEM_INFO,
-    'system.showItemInFolder': Permissions.FILESYSTEM_READ,
     'system.execute': Permissions.SYSTEM_EXECUTE,
     'system.readClipboard': Permissions.SYSTEM_CLIPBOARD,
     'system.getClipboardText': Permissions.SYSTEM_CLIPBOARD,

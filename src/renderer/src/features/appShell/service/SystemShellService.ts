@@ -26,10 +26,6 @@ export class SystemShellService {
         return await systemGateway.getTempPath();
     }
 
-    async openPath(path: string): Promise<ShellActionResult> {
-        return await systemGateway.openPath(path);
-    }
-
     async openExternal(url: string): Promise<ShellActionResult> {
         return await systemGateway.openExternal(url);
     }

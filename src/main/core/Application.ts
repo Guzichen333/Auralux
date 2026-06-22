@@ -54,6 +54,7 @@ export class Application {
     private isConfigured = false;
     private perfTimer = new PerformanceTimer();
     private netEaseApiService = new NetEaseApiService();
+    private netEaseReadyWatcherTimer: NodeJS.Timeout | null = null;
 
     constructor() {
         this.container = new ServiceContainer();
@@ -190,6 +191,9 @@ export class Application {
             recovered ? 'netease:api-ready' : 'netease:api-unavailable',
             {endpoint: this.netEaseApiService.endpoint}
         );
+        if (!recovered) {
+            this.scheduleNetEaseReadyWatcher();
+        }
     }
 
     private async waitForNetEaseApiReady(timeoutMs: number): Promise<boolean> {
@@ -202,6 +206,30 @@ export class Application {
             await new Promise(resolve => setTimeout(resolve, 1500));
         }
         return false;
+    }
+
+    private scheduleNetEaseReadyWatcher(): void {
+        if (this.netEaseReadyWatcherTimer) {
+            return;
+        }
+
+        this.netEaseReadyWatcherTimer = setInterval(async () => {
+            try {
+                if (!await this.netEaseApiService.isAvailable()) {
+                    return;
+                }
+                if (this.netEaseReadyWatcherTimer) {
+                    clearInterval(this.netEaseReadyWatcherTimer);
+                    this.netEaseReadyWatcherTimer = null;
+                }
+                console.log(`NetEase API recovered after startup window at ${this.netEaseApiService.endpoint}`);
+                this.windowManager.sendToMainWindow('netease:api-ready', {
+                    endpoint: this.netEaseApiService.endpoint
+                });
+            } catch (error) {
+                console.warn('NetEase API late-ready check failed:', error);
+            }
+        }, 15000);
     }
 
     /**
@@ -444,6 +472,7 @@ export class Application {
             controller.register();
             this.controllers.push(controller);
         }
+        void trayController.ensureDefaultTray();
 
         const duration = Date.now() - startTime;
         console.log(`✅ 启动 IPC 控制器注册完成 (${startupControllers.length} 个, ${duration}ms)`);
@@ -463,6 +492,10 @@ export class Application {
             }
 
             await this.netEaseApiService.stop();
+            if (this.netEaseReadyWatcherTimer) {
+                clearInterval(this.netEaseReadyWatcherTimer);
+                this.netEaseReadyWatcherTimer = null;
+            }
 
             // 保存缓存
             if (this.container.isInstantiated('libraryCacheManager')) {

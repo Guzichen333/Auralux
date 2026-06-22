@@ -46,7 +46,7 @@ class MediaDirectorySettingsService {
             };
         }
 
-        const ensureResult = await settingsShellService.ensureDirectoryExists(defaultPathResult.path) as PathResult;
+        const ensureResult = await settingsShellService.ensureDefaultCoverCachePath() as PathResult;
         if (!ensureResult.success) {
             return {
                 directory: null,

@@ -2321,6 +2321,15 @@ body.ui-next-app #netease-import-modal .btn:disabled,
   inset: 0;
   z-index: 1;
 }
+.ui-next-shell.is-immersive.with-queue > .mb-queue {
+  position: fixed;
+  top: 72px;
+  right: 0;
+  bottom: 0;
+  width: min(var(--mb-queue-w), 92vw);
+  z-index: 70;
+  box-shadow: -18px 0 44px rgba(0, 0, 0, .32);
+}
 .mb-immersive {
   position: relative;
   width: 100%;

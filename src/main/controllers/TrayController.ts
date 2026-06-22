@@ -32,6 +32,23 @@ export class TrayController extends BaseController {
     constructor(private windowManager: WindowManager) {
         super();
         this.settingsFilePath = path.join(app.getPath('userData'), 'tray-settings.json');
+        this.loadTraySettings();
+    }
+
+    private loadTraySettings(): void {
+        try {
+            if (!fs.existsSync(this.settingsFilePath)) {
+                return;
+            }
+            const parsed = JSON.parse(fs.readFileSync(this.settingsFilePath, 'utf8')) as Partial<TraySettings>;
+            this.settings = {
+                enabled: parsed.enabled !== false,
+                closeToTray: parsed.closeToTray === true,
+                startMinimized: parsed.startMinimized === true
+            };
+        } catch (error: any) {
+            console.warn('Failed to load tray settings:', error.message);
+        }
     }
 
     private async createTrayIcon(): Promise<Electron.NativeImage> {
@@ -109,6 +126,7 @@ export class TrayController extends BaseController {
             {
                 label: '退出', click: () => {
                     this.windowManager.sendToMainWindow('tray:quit');
+                    this.windowManager.requestQuit();
                     setTimeout(() => app.quit(), 300);
                 }
             }
@@ -156,6 +174,13 @@ export class TrayController extends BaseController {
                 this.showMainWindow();
             }
         });
+    }
+
+    async ensureDefaultTray(): Promise<void> {
+        if (this.settings.enabled === false) {
+            this.settings.enabled = true;
+        }
+        await this.createTrayInstance();
     }
 
     private destroyTrayInstance(): void {

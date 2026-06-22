@@ -7,6 +7,7 @@ const DEFAULT_CONFIG: NetEaseConfig = {
 class NetEaseApiClient {
     private config: NetEaseConfig;
     private cookie: string = '';
+    private readonly requestTimeoutMs = 8000;
 
     constructor(config: Partial<NetEaseConfig> = {}) {
         this.config = {...DEFAULT_CONFIG, ...config};
@@ -92,6 +93,13 @@ class NetEaseApiClient {
         return typeof value === 'string' ? value : '';
     }
 
+    private async fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
+        return await fetch(url, {
+            ...init,
+            signal: init.signal || AbortSignal.timeout(this.requestTimeoutMs)
+        });
+    }
+
     async get<T = any>(path: string, params: Record<string, string> = {}): Promise<T | null> {
         const requestParams = {...params};
         if (this.cookie && !requestParams.cookie && requestParams.skipCookie !== 'true') {
@@ -103,7 +111,7 @@ class NetEaseApiClient {
         const url = `${this.config.apiEndpoint}${path}${queryString ? '?' + queryString : ''}`;
 
         try {
-            const response = await fetch(url);
+            const response = await this.fetchWithTimeout(url);
             const data = await response.json();
 
             const setCookie = response.headers.get('set-cookie');
@@ -133,7 +141,7 @@ class NetEaseApiClient {
             }
             delete requestParams.skipCookie;
 
-            const response = await fetch(url, {
+            const response = await this.fetchWithTimeout(url, {
                 method: 'POST',
                 headers,
                 body: new URLSearchParams(requestParams).toString()
@@ -156,12 +164,10 @@ class NetEaseApiClient {
 
     async checkAvailability(): Promise<boolean> {
         try {
-            const url = `${this.config.apiEndpoint}/login/qr/key?timestamp=${Date.now()}`;
-            const response = await fetch(url, {signal: AbortSignal.timeout(3000)});
-            if (!response.ok) {
-                return false;
-            }
-            const data = await response.json();
+            const data = await this.get('/login/status', {
+                timestamp: String(Date.now()),
+                skipCookie: 'true'
+            });
             return data?.code === 200 || data?.data?.code === 200;
         } catch {
             return false;

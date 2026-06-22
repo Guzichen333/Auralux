@@ -23,10 +23,6 @@ export interface UpdateCheckResult {
     hasUpdate: boolean;
 }
 
-interface PackageInfo {
-    version?: string;
-}
-
 class UpdateService {
     private readonly githubRepo = 'Guzichen333/Auralux';
     private readonly githubApiUrl = this.githubRepo
@@ -60,14 +56,11 @@ class UpdateService {
     }
 
     async getCurrentVersion(): Promise<string> {
-        const response = await fetch('../../../package.json');
-
-        if (!response.ok) {
-            throw new Error(`读取版本信息失败: ${response.status} ${response.statusText}`);
+        const version = await window.electronAPI?.getVersion?.();
+        if (!version) {
+            throw new Error('Auralux version bridge is unavailable.');
         }
-
-        const packageInfo = await response.json() as PackageInfo;
-        return packageInfo.version || '';
+        return version;
     }
 
     async getCurrentVersionOrEmpty(): Promise<string> {

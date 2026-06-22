@@ -1106,12 +1106,14 @@
       var immersiveDialog = s.confirmDialog ? this._renderConfirmDialog(s.confirmDialog) : null;
       var immersiveQueue = s.queueOpen ? this._renderQueuePanel() : null;
       var preservedVideo = this._detachReusableImmersiveVideo();
+      var preservedSonic = this._detachReusableImmersiveSonicCanvas();
       clear(this.root, [
         this._renderImmersivePlayer(),
         immersiveQueue,
         immersiveDialog
       ]);
       this._restoreReusableImmersiveVideo(preservedVideo);
+      this._restoreReusableImmersiveSonicCanvas(preservedSonic);
       this._topbarEl = null;
       this._searchInput = null;
       this._focusImmersiveCacheEditInput();
@@ -1461,6 +1463,22 @@
       var playResult = preserved.node.play();
       if (playResult && typeof playResult.catch === 'function') playResult.catch(function () {});
     }
+  };
+
+  NewMusicShell.prototype._detachReusableImmersiveSonicCanvas = function () {
+    var canvas = this.root.querySelector('[data-sonic-topography-canvas]');
+    if (!canvas || !canvas.parentNode || this._immersiveSonicCanvas !== canvas) return null;
+    canvas.parentNode.removeChild(canvas);
+    return { node: canvas };
+  };
+
+  NewMusicShell.prototype._restoreReusableImmersiveSonicCanvas = function (preservedSonic) {
+    if (!preservedSonic || !preservedSonic.node) return;
+    var nextCanvas = this.root.querySelector('[data-sonic-topography-canvas]');
+    if (!nextCanvas || !nextCanvas.parentNode) return;
+    var parent = nextCanvas.parentNode;
+    parent.replaceChild(preservedSonic.node, nextCanvas);
+    this._immersiveSonicCanvas = preservedSonic.node;
   };
 
   NewMusicShell.prototype._renderConfirmDialog = function (dialog) {
@@ -2333,7 +2351,7 @@
       }
       var now = performance.now();
       var smoothVideoMode = self._isImmersiveSmoothVideoMode();
-      var minFrameMs = smoothVideoMode ? 33 : 0;
+      var minFrameMs = smoothVideoMode ? 33 : 33;
       if (!minFrameMs || now - self._immersiveLastVisualUpdate >= minFrameMs) {
         self._immersiveLastVisualUpdate = now;
         self._updateImmersiveProgressOnly(self._getImmersiveVisualPosition(), now);

@@ -370,6 +370,7 @@ export class UINextMusicBoxAdapter {
     private librarySnapshotPromise: Promise<void> | null = null;
     private librarySnapshotReconcileTimer = 0;
     private netEaseAssetMigrationInFlight = false;
+    private trayActionUnsubscribe: (() => void) | null = null;
 
     constructor(shell: UINextShell) {
         this.shell = shell;
@@ -378,6 +379,7 @@ export class UINextMusicBoxAdapter {
         });
         this.loadSettingsSnapshot();
         this.syncPlaybackState();
+        void trayShellService.initSystemTray();
         this.bindTrayActions();
         void this.syncTrayPlaybackState();
         this.loadLibrarySnapshot();
@@ -424,7 +426,11 @@ export class UINextMusicBoxAdapter {
     }
 
     private bindTrayActions(): void {
-        window.electronAPI?.tray?.onAction?.((action: string, payload?: unknown) => {
+        if (this.trayActionUnsubscribe) {
+            return;
+        }
+
+        this.trayActionUnsubscribe = window.electronAPI?.tray?.onAction?.((action: string, payload?: unknown) => {
             switch (action) {
                 case 'tray:previous':
                     this.previousTrack();
@@ -456,7 +462,12 @@ export class UINextMusicBoxAdapter {
                     this.openSettings();
                     break;
             }
-        });
+        }) || null;
+    }
+
+    dispose(): void {
+        this.trayActionUnsubscribe?.();
+        this.trayActionUnsubscribe = null;
     }
 
     search(query: string): void {

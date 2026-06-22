@@ -44,6 +44,8 @@ class NetEaseCloudMusic extends Component {
     private pendingAssetMigrationProgressStatusText = '';
     private assetMigrationProgressFlushTimer: number | null = null;
     private readonly assetMigrationProgressMinIntervalMs = 250;
+    private disposables: Array<() => void> = [];
+    private loginStatusTimer: number | null = null;
 
     constructor() {
         super(null, false);
@@ -55,6 +57,11 @@ class NetEaseCloudMusic extends Component {
     }
 
     private async initLoginStatus(attempt = 0): Promise<void> {
+        if (this.loginStatusTimer !== null) {
+            window.clearTimeout(this.loginStatusTimer);
+            this.loginStatusTimer = null;
+        }
+
         const maxAttempts = 8;
         this.isAvailable = await netEaseApiClient.checkAvailability();
         if (!this.isAvailable) {
@@ -62,7 +69,8 @@ class NetEaseCloudMusic extends Component {
             this.updateStatusIndicator();
 
             if (attempt < maxAttempts - 1) {
-                window.setTimeout(() => {
+                this.loginStatusTimer = window.setTimeout(() => {
+                    this.loginStatusTimer = null;
                     void this.initLoginStatus(attempt + 1);
                 }, 1500);
             }
@@ -74,16 +82,23 @@ class NetEaseCloudMusic extends Component {
     }
 
     private setupApiStatusEvents(): void {
-        window.electronAPI?.netease?.onApiReady((data) => {
+        const readyUnsubscribe = window.electronAPI?.netease?.onApiReady((data) => {
             netEaseApiClient.setApiEndpoint(data.endpoint);
             void this.initLoginStatus();
         });
-        window.electronAPI?.netease?.onApiUnavailable((data) => {
+        if (readyUnsubscribe) {
+            this.disposables.push(readyUnsubscribe);
+        }
+
+        const unavailableUnsubscribe = window.electronAPI?.netease?.onApiUnavailable((data) => {
             netEaseApiClient.setApiEndpoint(data.endpoint);
             this.isAvailable = false;
             this.isLoggedIn = false;
             this.updateStatusIndicator();
         });
+        if (unavailableUnsubscribe) {
+            this.disposables.push(unavailableUnsubscribe);
+        }
     }
 
     private setupModals(): void {
@@ -100,31 +115,45 @@ class NetEaseCloudMusic extends Component {
         this.qrDiagnosticsActions = this.ensureQRLoginDiagnosticsActions();
     }
 
+    private listen(
+        target: EventTarget | null,
+        type: string,
+        handler: EventListenerOrEventListenerObject,
+        options?: AddEventListenerOptions | boolean
+    ): void {
+        if (!target) {
+            return;
+        }
+
+        target.addEventListener(type, handler, options);
+        this.disposables.push(() => target.removeEventListener(type, handler, options));
+    }
+
     private setupEventListeners(): void {
         const statusIndicator = document.getElementById('netease-status-indicator');
         if (statusIndicator) {
             statusIndicator.style.cursor = 'pointer';
-            statusIndicator.addEventListener('click', () => this.showLoginModal());
+            this.listen(statusIndicator, 'click', () => this.showLoginModal());
         }
 
         const importBtn = document.getElementById('import-netease-playlist-btn');
-        if (importBtn) importBtn.addEventListener('click', () => this.showImportModal());
+        if (importBtn) this.listen(importBtn, 'click', () => this.showImportModal());
 
         const importClose = document.getElementById('netease-import-modal-close');
         const importPreviewBtn = document.getElementById('netease-import-preview-btn');
-        if (importClose) importClose.addEventListener('click', () => this.hideModal(this.importModal));
-        if (importPreviewBtn) importPreviewBtn.addEventListener('click', () => this.lookupPlaylist());
-        if (this.importConfirmBtn) this.importConfirmBtn.addEventListener('click', () => this.doImportPlaylist());
-        if (this.importUndoBtn) this.importUndoBtn.addEventListener('click', () => this.undoLatestImport());
-        if (this.importAssetsBtn) this.importAssetsBtn.addEventListener('click', () => this.openAssetMigration());
-        if (this.importAssetsCancelBtn) this.importAssetsCancelBtn.addEventListener('click', () => this.cancelAssetMigration());
+        if (importClose) this.listen(importClose, 'click', () => this.hideModal(this.importModal));
+        if (importPreviewBtn) this.listen(importPreviewBtn, 'click', () => this.lookupPlaylist());
+        if (this.importConfirmBtn) this.listen(this.importConfirmBtn, 'click', () => this.doImportPlaylist());
+        if (this.importUndoBtn) this.listen(this.importUndoBtn, 'click', () => this.undoLatestImport());
+        if (this.importAssetsBtn) this.listen(this.importAssetsBtn, 'click', () => this.openAssetMigration());
+        if (this.importAssetsCancelBtn) this.listen(this.importAssetsCancelBtn, 'click', () => this.cancelAssetMigration());
 
         this.debouncedLookup = debounce(async (_query: string) => {
             await this.lookupPlaylist();
         }, 400) as (query: string) => void;
 
         if (this.playlistIdInput) {
-            this.playlistIdInput.addEventListener('input', () => {
+            this.listen(this.playlistIdInput, 'input', () => {
                 const value = this.playlistIdInput!.value;
                 this.currentPlaylist = null;
                 this.importLookupSession++;
@@ -143,19 +172,19 @@ class NetEaseCloudMusic extends Component {
         const loginTabQr = document.getElementById('netease-login-tab-qr');
         const loginTabPhone = document.getElementById('netease-login-tab-phone');
         const getQrBtn = document.getElementById('netease-get-qr-btn');
-        if (loginClose) loginClose.addEventListener('click', () => {
+        if (loginClose) this.listen(loginClose, 'click', () => {
             netEaseAuthService.stopQRCheck();
             this.hideModal(this.loginModal);
         });
-        if (loginConfirm) loginConfirm.addEventListener('click', () => this.doPhoneLogin());
-        if (loginTabQr) loginTabQr.addEventListener('click', () => this.switchLoginTab('qr'));
-        if (loginTabPhone) loginTabPhone.addEventListener('click', () => this.switchLoginTab('phone'));
-        if (getQrBtn) getQrBtn.addEventListener('click', () => this.startQRLogin());
-        if (this.copyQRDiagnosticsBtn) this.copyQRDiagnosticsBtn.addEventListener('click', () => this.copyQRLoginDiagnostics());
+        if (loginConfirm) this.listen(loginConfirm, 'click', () => this.doPhoneLogin());
+        if (loginTabQr) this.listen(loginTabQr, 'click', () => this.switchLoginTab('qr'));
+        if (loginTabPhone) this.listen(loginTabPhone, 'click', () => this.switchLoginTab('phone'));
+        if (getQrBtn) this.listen(getQrBtn, 'click', () => this.startQRLogin());
+        if (this.copyQRDiagnosticsBtn) this.listen(this.copyQRDiagnosticsBtn, 'click', () => this.copyQRLoginDiagnostics());
 
         [this.importModal, this.loginModal].forEach(modal => {
             if (modal) {
-                modal.addEventListener('click', (e) => {
+                this.listen(modal, 'click', (e) => {
                     if (e.target === modal) this.hideModal(modal);
                 });
             }
@@ -171,7 +200,7 @@ class NetEaseCloudMusic extends Component {
     private hideModal(modal: HTMLElement | null): void {
         if (!modal) return;
         modal.classList.remove('show');
-        setTimeout(() => {
+        this.setTimeoutManaged(() => {
             if (!modal.classList.contains('show')) {
                 modal.style.display = 'none';
             }
@@ -1075,7 +1104,7 @@ class NetEaseCloudMusic extends Component {
                         qrStatus.textContent = `${qrStatus.textContent || ''} ${accountProfile.nickname || '\u7528\u6237'}`.trim();
                     }
                     window.dispatchEvent(new CustomEvent('netease-login-status-changed'));
-                    setTimeout(() => this.hideModal(this.loginModal), 1500);
+                    this.setTimeoutManaged(() => this.hideModal(this.loginModal), 1500);
                     break;
                 case 'expired':
                     netEaseAuthService.stopQRCheck();
@@ -1155,7 +1184,7 @@ class NetEaseCloudMusic extends Component {
             }
             appNotificationService.showSuccess('网易云音乐登录成功');
             window.dispatchEvent(new CustomEvent('netease-login-status-changed'));
-            setTimeout(() => this.hideModal(this.loginModal), 1500);
+            this.setTimeoutManaged(() => this.hideModal(this.loginModal), 1500);
         } else {
             if (statusEl) {
                 statusEl.style.color = 'var(--error-color, #ff4444)';
@@ -1222,6 +1251,34 @@ class NetEaseCloudMusic extends Component {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    dispose(): void {
+        this.disposables.splice(0).forEach((dispose) => {
+            try {
+                dispose();
+            } catch (error) {
+                console.warn('[NetEaseCloudMusic] Failed to dispose listener', error);
+            }
+        });
+
+        if (this.loginStatusTimer !== null) {
+            window.clearTimeout(this.loginStatusTimer);
+            this.loginStatusTimer = null;
+        }
+
+        if (this.assetMigrationProgressFlushTimer !== null) {
+            window.clearTimeout(this.assetMigrationProgressFlushTimer);
+            this.assetMigrationProgressFlushTimer = null;
+        }
+
+        netEaseAuthService.stopQRCheck();
+        this.removeAllManagedResources();
+    }
+
+    destroy(): void {
+        this.dispose();
+        super.destroy();
     }
 }
 

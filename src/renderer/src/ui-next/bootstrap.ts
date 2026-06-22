@@ -350,9 +350,9 @@ function renderStartupError(error: unknown, onEnterLocalMode: () => void): void 
         '<button class="mb-startup-error__skip" type="button" data-startup-enter-local>进入本地模式</button>',
         '<div class="mb-startup-error__body">',
         '<div class="mb-startup-error__title">Auralux 启动受阻</div>',
-        '<div class="mb-startup-error__message">',
+        '<div class="mb-startup-error__message" data-startup-error-message>',
         'Auralux 启动失败：',
-        message,
+        escapeHtml(message),
         '</div>',
         '</div>',
         '</div>'

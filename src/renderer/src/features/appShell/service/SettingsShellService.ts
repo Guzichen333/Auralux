@@ -63,8 +63,8 @@ export class SettingsShellService {
         return await settingsSystemGateway.getDefaultCoverCachePath() as PathResult;
     }
 
-    async ensureDirectoryExists(directoryPath: string): Promise<PathResult> {
-        return await settingsSystemGateway.ensureDirectoryExists(directoryPath) as PathResult;
+    async ensureDefaultCoverCachePath(): Promise<PathResult> {
+        return await settingsSystemGateway.ensureDefaultCoverCachePath() as PathResult;
     }
 }
 

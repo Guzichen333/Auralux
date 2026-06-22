@@ -70,12 +70,6 @@ export function createSystemAPI(_context: ExtensionContext): SystemAPI {
             }, 'system.getEnv');
         },
 
-        async showItemInFolder(filePath: string): Promise<void> {
-            return ErrorUtils.wrapAsync(async () => {
-                await systemShellService.openPath(filePath);
-            }, 'system.showItemInFolder');
-        },
-
         async getClipboardText(): Promise<string> {
             return ErrorUtils.wrapAsync(async () => {
                 if (navigator.clipboard && navigator.clipboard.readText) {

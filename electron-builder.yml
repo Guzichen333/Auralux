@@ -5,10 +5,10 @@ directories:
   output: dist
   buildResources: build
 files:
+  - THIRD_PARTY_NOTICES.md
   - dist/main/**/*
   - src/renderer/public/**/*
   - node_modules/**/*
-  - "!node_modules/**/{CHANGELOG.md,README.md,readme.md,readme.txt,author,authors,contributors,copying,copyright,*license*,licence*,notice,Notice}"
   - "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
   - "!node_modules/**/*.d.ts"
   - "!node_modules/.bin"

@@ -143,10 +143,6 @@ export class AppShellService {
         return await systemShellService.getTempPath();
     }
 
-    async openPath(path: string): Promise<ShellActionResult> {
-        return await systemShellService.openPath(path);
-    }
-
     async openExternal(url: string): Promise<ShellActionResult> {
         return await systemShellService.openExternal(url);
     }
@@ -247,8 +243,8 @@ export class AppShellService {
         return await settingsShellService.getDefaultCoverCachePath();
     }
 
-    async ensureDirectoryExists(directoryPath: string): Promise<PathResult> {
-        return await settingsShellService.ensureDirectoryExists(directoryPath);
+    async ensureDefaultCoverCachePath(): Promise<PathResult> {
+        return await settingsShellService.ensureDefaultCoverCachePath();
     }
 }
 

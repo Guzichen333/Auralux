@@ -41,8 +41,8 @@ class SettingsSystemGateway {
         return getElectronAPI().getDefaultCoverCachePath();
     }
 
-    ensureDirectoryExists(directoryPath: string): Promise<unknown> {
-        return getElectronAPI().ensureDirectoryExists(directoryPath);
+    ensureDefaultCoverCachePath(): Promise<unknown> {
+        return getElectronAPI().ensureDefaultCoverCachePath();
     }
 
     openUserDataFolder(): Promise<unknown> {

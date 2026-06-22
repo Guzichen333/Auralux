@@ -71,13 +71,10 @@ interface ElectronAPI {
     getDefaultCoverCachePath: () => Promise<{ success: boolean, path?: string, error?: string }>;
 
     // 创建目录（确认目录存在，不存在则创建）
-    ensureDirectoryExists: (dirPath: string) => Promise<{ success: boolean, path?: string, error?: string }>;
+    ensureDefaultCoverCachePath: () => Promise<{ success: boolean, path?: string, error?: string }>;
 
     // 打开开发工具
     openDevTools: () => Promise<{ success: boolean, error?: string }>;
-
-    // 打开指定目录
-    openPath: (path: string) => Promise<{ success: boolean, error?: string }>;
 
     // 使用系统默认程序打开外部链接
     openExternal: (url: string) => Promise<{ success: boolean, error?: string }>;

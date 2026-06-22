@@ -33,6 +33,12 @@ interface SavedWindowConfig {
     lastUpdated?: number;
 }
 
+interface TraySettingsSnapshot {
+    enabled: boolean;
+    closeToTray: boolean;
+    startMinimized: boolean;
+}
+
 /**
  * 窗口管理器类
  */
@@ -41,15 +47,20 @@ export class WindowManager {
     private desktopLyricsWindow: BrowserWindow | null = null;
     private preloadPath: string;
     private windowConfigPath: string;
-    private getTraySettingsCallback: (() => { enabled: boolean; closeToTray: boolean }) | null = null;
+    private isQuitting = false;
+    private getTraySettingsCallback: (() => { enabled: boolean; closeToTray: boolean; startMinimized: boolean }) | null = null;
 
     constructor() {
         this.preloadPath = path.join(__dirname, '../preload.js');
         this.windowConfigPath = path.join(app.getPath('userData'), 'window-config.json');
     }
 
-    setTraySettingsGetter(fn: () => { enabled: boolean; closeToTray: boolean }): void {
+    setTraySettingsGetter(fn: () => { enabled: boolean; closeToTray: boolean; startMinimized: boolean }): void {
         this.getTraySettingsCallback = fn;
+    }
+
+    requestQuit(): void {
+        this.isQuitting = true;
     }
 
     private async loadWindowConfig(): Promise<SavedWindowConfig> {
@@ -121,6 +132,28 @@ export class WindowManager {
         });
     }
 
+    private getTraySettingsSnapshot(): TraySettingsSnapshot | null {
+        if (!this.getTraySettingsCallback) {
+            return null;
+        }
+
+        try {
+            return this.getTraySettingsCallback();
+        } catch (error: any) {
+            console.warn('鈿狅笍 璇诲彇鎵樼洏璁剧疆澶辫触:', error.message);
+            return null;
+        }
+    }
+
+    private shouldStartMinimized(): boolean {
+        const traySettings = this.getTraySettingsSnapshot();
+        if (this.isQuitting || !traySettings) {
+            return false;
+        }
+
+        return traySettings.enabled && traySettings.startMinimized;
+    }
+
     /**
      * 创建主窗口
      */
@@ -158,6 +191,9 @@ export class WindowManager {
         // 加载页面
         const showMainWindow = (): void => {
             if (this.mainWindow && !this.mainWindow.isDestroyed() && !this.mainWindow.isVisible()) {
+                if (this.shouldStartMinimized()) {
+                    return;
+                }
                 this.mainWindow.show();
             }
         };
@@ -213,6 +249,9 @@ export class WindowManager {
         // 关闭事件：检查是否最小化到托盘
         this.mainWindow.on('close', (event) => {
             try {
+                if (this.isQuitting) {
+                    return;
+                }
                 if (this.getTraySettingsCallback) {
                     const traySettings = this.getTraySettingsCallback();
                     if (traySettings.enabled && traySettings.closeToTray) {

@@ -124,7 +124,7 @@ function createTaskDefinitions(): StartupWarmupTaskDefinition[] {
         },
         {
             id: 'neteaseAvailability',
-            critical: true,
+            critical: false,
             label: '连接网易云 API',
             run: async () => {
                 const endpoint = await waitForNetEaseApiReady();
@@ -138,6 +138,7 @@ function createTaskDefinitions(): StartupWarmupTaskDefinition[] {
         },
         {
             id: 'neteaseProfile',
+            critical: false,
             label: '同步网易云账号',
             run: async () => {
                 const endpoint = await waitForNetEaseApiReady();

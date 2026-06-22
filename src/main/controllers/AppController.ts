@@ -55,17 +55,6 @@ export class AppController extends BaseController {
         }
     }
 
-    @IpcHandle('app:openPath')
-    async openPath(filePath: string): Promise<{ success: boolean; error?: string }> {
-        try {
-            await shell.openPath(filePath);
-            return {success: true};
-        } catch (error: any) {
-            console.error('❌ 打开文件夹失败:', error);
-            return {success: false, error: error.message};
-        }
-    }
-
     @IpcHandle('app:openExternal')
     async openExternal(url: string): Promise<{ success: boolean; error?: string }> {
         try {
@@ -91,13 +80,14 @@ export class AppController extends BaseController {
         }
     }
 
-    @IpcHandle('app:ensureDirectoryExists')
-    async ensureDirectoryExists(dirPath: string): Promise<{ success: boolean; path?: string; error?: string }> {
+    @IpcHandle('app:ensureDefaultCoverCachePath')
+    async ensureDefaultCoverCachePath(): Promise<{ success: boolean; path?: string; error?: string }> {
         try {
-            await fs.promises.mkdir(dirPath, {recursive: true});
-            return {success: true, path: dirPath};
+            const coverCachePath = path.join(app.getPath('userData'), 'CoverCache');
+            await fs.promises.mkdir(coverCachePath, {recursive: true});
+            return {success: true, path: coverCachePath};
         } catch (error: any) {
-            console.error('❌ 创建目录失败:', error);
+            console.error('Failed to create default cover cache directory:', error);
             return {success: false, error: error.message};
         }
     }

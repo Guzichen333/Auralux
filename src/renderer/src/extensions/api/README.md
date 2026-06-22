@@ -431,8 +431,6 @@ const env = api.system.getEnv('NODE_ENV');
 // 打开外部链接
 await api.system.openExternal('https://example.com');
 
-// 显示文件
-await api.system.showItemInFolder('/path/to/file');
 
 // 剪贴板
 const text = await api.system.getClipboardText();

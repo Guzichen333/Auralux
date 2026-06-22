@@ -108,7 +108,6 @@ const EXTERNAL_PLUGIN_ALLOWED_API = new Set<string>([
     'system.getTempPath',
     'system.getLanguage',
     'system.getEnv',
-    'system.showItemInFolder',
     'system.getClipboardText',
     'system.setClipboardText',
     'window.maximize',

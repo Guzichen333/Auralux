@@ -13,8 +13,10 @@ export class NetEaseApiService {
     private port: number;
     private readonly host: string;
     private readonly startupTimeoutMs: number;
+    private readonly healthPath = '/login/status';
     private process: ChildProcessWithoutNullStreams | null = null;
     private startedByMusicBox = false;
+    private externalEndpointAdopted = false;
 
     constructor(options: NetEaseApiServiceOptions = {}) {
         this.preferredPort = options.port ?? 3000;
@@ -44,6 +46,10 @@ export class NetEaseApiService {
         }
 
         this.port = await this.findLaunchPort();
+        if (this.externalEndpointAdopted) {
+            console.log(`NetEase API already available at ${this.endpoint}`);
+            return true;
+        }
         const nodeExecutable = process.env.MUSICBOX_NETEASE_NODE || this.resolveNodeExecutable();
         const env = {
             ...process.env,
@@ -122,13 +128,17 @@ export class NetEaseApiService {
             const candidate = this.preferredPort + offset;
             const endpoint = `http://${this.host}:${candidate}`;
             if (await this.probeNetEaseApi(endpoint)) {
+                this.port = candidate;
+                this.externalEndpointAdopted = true;
                 return candidate;
             }
             if (await this.isPortAvailable(candidate)) {
+                this.externalEndpointAdopted = false;
                 return candidate;
             }
         }
 
+        this.externalEndpointAdopted = false;
         return this.preferredPort;
     }
 
@@ -156,7 +166,7 @@ export class NetEaseApiService {
 
     private async probeNetEaseApi(endpoint: string): Promise<boolean> {
         return new Promise((resolve) => {
-            const url = `${endpoint}/login/qr/key?timestamp=${Date.now()}`;
+            const url = `${endpoint}${this.healthPath}?timestamp=${Date.now()}`;
             const request = http.get(url, (response) => {
                 let body = '';
                 response.setEncoding('utf8');
