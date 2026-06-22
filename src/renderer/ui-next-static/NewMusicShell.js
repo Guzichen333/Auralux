@@ -798,7 +798,7 @@
           self.render();
           return;
         }
-        self.goBack();
+        self.exitImmersivePlayer();
         return;
       }
 
@@ -1037,6 +1037,28 @@
     if (this._historyIndex <= 0) return;
     this._historyIndex -= 1;
     this._applyHistoryEntry(this._history[this._historyIndex]);
+  };
+
+  NewMusicShell.prototype.exitImmersivePlayer = function () {
+    this.state.immersiveStylePanelOpen = false;
+    this.state.queueOpen = false;
+
+    if (this._historyIndex > 0) {
+      this.goBack();
+      return;
+    }
+
+    this._history = [{ view: 'home', activePlaylistId: null }];
+    this._historyIndex = 0;
+    this.state.view = 'home';
+    this.state.activePlaylistId = null;
+    this._syncHistoryFlags();
+
+    if (this.adapter && typeof this.adapter.openHomeView === 'function') {
+      return this.adapter.openHomeView(true);
+    }
+
+    this.render();
   };
 
   NewMusicShell.prototype.goForward = function () {
@@ -1692,7 +1714,7 @@
       queueCount: s.queue.tracks.length,
       queueOpen: s.queueOpen,
       sonicThemeName: (s.immersiveSonicTheme && s.immersiveSonicTheme.name) || 'Nocturnal',
-      onBack: function () { self.goBack(); },
+      onBack: function () { self.exitImmersivePlayer(); },
       onToggleStylePanel: function () {
         s.immersiveStylePanelOpen = !s.immersiveStylePanelOpen;
         if (s.immersiveStylePanelOpen && self.adapter && typeof self.adapter.loadImmersiveCachedVideos === 'function') {
