@@ -57,6 +57,8 @@ jobs:
           path: |
             dist/*.exe
             dist/*.zip
+            dist/latest.yml
+            dist/*.blockmap
           if-no-files-found: error
 
   build-macos:
@@ -178,7 +180,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.version }}
-          name: MusicBox-${{ inputs.version }}
+          name: Auralux ${{ inputs.version }}
           draft: ${{ inputs.draft }}
           prerelease: false
           files: |
