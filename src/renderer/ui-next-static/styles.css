@@ -6466,7 +6466,7 @@ body.ui-next-app #netease-import-modal .btn:disabled,
 }
 
 .mb-daily-desktop {
-  grid-template-areas: "primary" "discovery" "recent" "offline" "sync";
+  grid-template-areas: "primary" "discovery" "recent" "sync";
   gap: 14px;
   border-color: color-mix(in oklch, var(--mb-home-border-soft) 74%, var(--mb-home-focus-ring) 26%);
   box-shadow: 0 18px 42px color-mix(in oklch, var(--mb-bg) 34%, transparent);
@@ -6484,10 +6484,6 @@ body.ui-next-app #netease-import-modal .btn:disabled,
 
 .mb-daily-desktop > .mb-daily-rail:nth-of-type(3) {
   grid-area: recent;
-}
-
-.mb-daily-desktop > .mb-daily-rail:nth-of-type(4) {
-  grid-area: offline;
 }
 
 .mb-daily-sync {
@@ -7698,6 +7694,105 @@ body.ui-next-app #netease-import-modal .btn:disabled,
   grid-auto-columns: clamp(112px, calc((100% - 50px) / 6), 132px);
 }
 
+/* Stage 52 home layout balance */
+.mb-daily-desktop__discovery {
+  grid-template-columns: minmax(320px, 1fr) minmax(340px, .92fr);
+  align-items: stretch;
+}
+
+.mb-daily-desktop__discovery {
+  grid-template-columns: minmax(380px, .86fr) minmax(500px, 1.14fr);
+}
+
+.mb-daily-rail,
+.mb-playlist-rail {
+  align-content: start;
+  min-height: 224px;
+}
+
+.mb-daily-rail__tracks {
+  align-content: start;
+  grid-auto-columns: clamp(128px, calc((100% - 18px) / 3), 156px);
+  scrollbar-gutter: stable;
+}
+
+.mb-playlist-rail .mb-row-cards {
+  grid-auto-columns: clamp(92px, calc((100% - 44px) / 5), 112px);
+  scrollbar-gutter: stable;
+}
+
+.mb-playlist-rail .mb-album-card:nth-child(-n + 2) {
+  min-width: 0;
+}
+
+.mb-playlist-rail .mb-album-card {
+  padding: 5px;
+  gap: 5px;
+}
+
+.mb-playlist-rail .mb-album-card__title {
+  min-height: 28px;
+  font-size: 11px;
+}
+
+.mb-playlist-rail .mb-album-card__source {
+  display: none;
+}
+
+.mb-playlist-rail .mb-album-card__stats {
+  height: 17px;
+  font-size: 10px;
+}
+
+@media (max-width: 980px) {
+  .mb-daily-desktop__discovery {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mb-playlist-rail .mb-row-cards {
+    grid-auto-columns: clamp(90px, calc((100% - 54px) / 6), 108px);
+  }
+}
+/* end Stage 52 home layout balance */
+
+/* Stage 53 daily rail layout */
+.mb-daily-rail__tracks {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-columns: auto;
+  align-content: start;
+  gap: 8px;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  padding-bottom: 0;
+  scrollbar-gutter: auto;
+}
+
+.mb-daily-rail .mb-daily-track {
+  width: 100%;
+  min-height: 40px;
+  height: 40px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  padding: 5px 7px;
+}
+
+.mb-daily-rail .mb-daily-track .mb-src-badge {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  .mb-daily-rail__tracks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .mb-daily-rail__tracks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* end Stage 53 daily rail layout */
+
 .mb-section {
   margin-top: 16px;
 }
@@ -8533,3 +8628,953 @@ body.ui-next-app #netease-import-modal .btn:disabled,
   }
 }
 /* end Stage 31 queue panel quality */
+
+/* Stage 55 region tone map */
+.ui-next-app {
+  --mb-region-sidebar-bg: oklch(14% 0.014 248);
+  --mb-region-sidebar-border: oklch(30% 0.018 248);
+  --mb-region-main-bg: oklch(96% 0.009 238);
+  --mb-region-main-surface: oklch(99% 0.006 238);
+  --mb-region-main-surface-soft: oklch(92% 0.012 238);
+  --mb-region-main-border: oklch(77% 0.016 238);
+  --mb-region-main-hover: oklch(90% 0.014 238);
+  --mb-region-main-active: oklch(84% 0.018 238);
+  --mb-region-chrome-bg: oklch(28% 0.011 238);
+  --mb-region-chrome-surface: oklch(34% 0.013 238);
+  --mb-region-chrome-border: oklch(45% 0.014 238);
+  --mb-region-chrome-muted: oklch(78% 0.011 238);
+}
+
+
+.ui-next-shell[data-region-tone="peach-blush"] {
+  --mb-region-sidebar-bg: oklch(16% 0.020 315);
+  --mb-region-sidebar-border: color-mix(in oklch, #FF5391 42%, oklch(28% 0.018 315));
+  --mb-region-main-bg: color-mix(in oklch, #FFB09C 42%, #FF9CDA 22%);
+  --mb-region-main-gradient: radial-gradient(circle at 13% 8%, color-mix(in oklch, #FF5391 70%, white 30%) 0, transparent 34%), radial-gradient(circle at 83% 30%, color-mix(in oklch, #FF9CDA 72%, white 28%) 0, transparent 38%), radial-gradient(circle at 70% 76%, color-mix(in oklch, #FFB09C 82%, white 18%) 0, transparent 44%), linear-gradient(135deg, color-mix(in oklch, #FF5391 42%, white 58%), color-mix(in oklch, #FFB09C 48%, white 52%) 52%, color-mix(in oklch, #FF9CDA 38%, white 62%));
+  --mb-region-main-surface: color-mix(in oklch, #FFF4F5 70%, #FFB09C 30%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #FFB09C 45%, #FF9CDA 24%);
+  --mb-region-main-border: color-mix(in oklch, #FF5391 34%, white 66%);
+  --mb-region-main-hover: color-mix(in oklch, #FFB09C 42%, white 58%);
+  --mb-region-main-active: color-mix(in oklch, #FF5391 42%, #FFB09C 58%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(23% 0.018 315) 82%, #FF5391 18%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(31% 0.020 315) 76%, #FF9CDA 24%);
+  --mb-region-chrome-border: color-mix(in oklch, #FF9CDA 32%, oklch(44% 0.018 315));
+  --mb-region-chrome-muted: color-mix(in oklch, #FFB09C 38%, white 62%);
+  --mb-region-main-accent: #FF5391;
+}
+
+.ui-next-shell[data-region-tone="lilac-sun"] {
+  --mb-region-sidebar-bg: oklch(17% 0.022 272);
+  --mb-region-sidebar-border: color-mix(in oklch, #B18DFF 44%, oklch(29% 0.020 272));
+  --mb-region-main-bg: color-mix(in oklch, #B18DFF 34%, #FFF443 28%);
+  --mb-region-main-gradient: radial-gradient(circle at 16% 12%, color-mix(in oklch, #B18DFF 68%, white 32%) 0, transparent 35%), radial-gradient(circle at 82% 12%, color-mix(in oklch, #FFF443 74%, white 26%) 0, transparent 34%), radial-gradient(circle at 72% 72%, color-mix(in oklch, #FFBB57 68%, white 32%) 0, transparent 42%), linear-gradient(135deg, color-mix(in oklch, #B18DFF 42%, white 58%), color-mix(in oklch, #FFBB57 40%, white 60%) 55%, color-mix(in oklch, #FFF443 36%, white 64%));
+  --mb-region-main-surface: color-mix(in oklch, white 70%, #FFBB57 30%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #B18DFF 34%, #FFF443 24%);
+  --mb-region-main-border: color-mix(in oklch, #B18DFF 30%, #FFBB57 24%);
+  --mb-region-main-hover: color-mix(in oklch, #FFBB57 34%, white 66%);
+  --mb-region-main-active: color-mix(in oklch, #B18DFF 38%, #FFF443 28%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(24% 0.018 272) 78%, #B18DFF 22%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(32% 0.018 272) 72%, #FFBB57 28%);
+  --mb-region-chrome-border: color-mix(in oklch, #B18DFF 34%, oklch(45% 0.014 272));
+  --mb-region-chrome-muted: color-mix(in oklch, #FFF443 30%, white 70%);
+  --mb-region-main-accent: #B18DFF;
+}
+
+.ui-next-shell[data-region-tone="candy-violet"] {
+  --mb-region-sidebar-bg: oklch(16% 0.028 275);
+  --mb-region-sidebar-border: color-mix(in oklch, #5240FE 52%, oklch(30% 0.022 275));
+  --mb-region-main-bg: color-mix(in oklch, #FD91FF 34%, #AD9EFF 34%);
+  --mb-region-main-gradient: radial-gradient(circle at 13% 12%, color-mix(in oklch, #FD91FF 70%, white 30%) 0, transparent 36%), radial-gradient(circle at 77% 78%, color-mix(in oklch, #5240FE 68%, white 32%) 0, transparent 44%), radial-gradient(circle at 83% 16%, color-mix(in oklch, #AD9EFF 68%, white 32%) 0, transparent 34%), linear-gradient(135deg, color-mix(in oklch, #FD91FF 42%, white 58%), color-mix(in oklch, #AD9EFF 44%, white 56%) 50%, color-mix(in oklch, #5240FE 34%, white 66%));
+  --mb-region-main-surface: color-mix(in oklch, white 68%, #AD9EFF 32%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #FD91FF 32%, #5240FE 20%);
+  --mb-region-main-border: color-mix(in oklch, #5240FE 28%, #FD91FF 24%);
+  --mb-region-main-hover: color-mix(in oklch, #AD9EFF 38%, white 62%);
+  --mb-region-main-active: color-mix(in oklch, #5240FE 36%, #FD91FF 32%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(22% 0.022 275) 78%, #5240FE 22%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(31% 0.020 275) 72%, #AD9EFF 28%);
+  --mb-region-chrome-border: color-mix(in oklch, #AD9EFF 34%, oklch(45% 0.014 275));
+  --mb-region-chrome-muted: color-mix(in oklch, #AD9EFF 38%, white 62%);
+  --mb-region-main-accent: #5240FE;
+}
+
+.ui-next-shell[data-region-tone="apricot-sky"] {
+  --mb-region-sidebar-bg: oklch(17% 0.018 240);
+  --mb-region-sidebar-border: color-mix(in oklch, #87BDFF 42%, oklch(31% 0.018 240));
+  --mb-region-main-bg: color-mix(in oklch, #FFC870 34%, #87BDFF 28%);
+  --mb-region-main-gradient: radial-gradient(circle at 12% 8%, color-mix(in oklch, #FFC870 76%, white 24%) 0, transparent 38%), radial-gradient(circle at 75% 72%, color-mix(in oklch, #87BDFF 66%, white 34%) 0, transparent 45%), radial-gradient(circle at 88% 12%, color-mix(in oklch, #DBEAFF 78%, white 22%) 0, transparent 34%), linear-gradient(135deg, color-mix(in oklch, #FFC870 44%, white 56%), color-mix(in oklch, #DBEAFF 55%, white 45%) 48%, color-mix(in oklch, #87BDFF 42%, white 58%));
+  --mb-region-main-surface: color-mix(in oklch, white 70%, #DBEAFF 30%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #FFC870 34%, #87BDFF 24%);
+  --mb-region-main-border: color-mix(in oklch, #87BDFF 32%, #FFC870 22%);
+  --mb-region-main-hover: color-mix(in oklch, #DBEAFF 55%, white 45%);
+  --mb-region-main-active: color-mix(in oklch, #FFC870 34%, #87BDFF 34%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(25% 0.014 240) 80%, #87BDFF 20%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(33% 0.014 240) 74%, #FFC870 26%);
+  --mb-region-chrome-border: color-mix(in oklch, #87BDFF 34%, oklch(45% 0.014 240));
+  --mb-region-chrome-muted: color-mix(in oklch, #DBEAFF 46%, white 54%);
+  --mb-region-main-accent: #87BDFF;
+}
+
+.ui-next-shell[data-region-tone="aqua-dream"] {
+  --mb-region-sidebar-bg: oklch(17% 0.018 235);
+  --mb-region-sidebar-border: color-mix(in oklch, #58B8FF 46%, oklch(30% 0.018 235));
+  --mb-region-main-bg: color-mix(in oklch, #74DFFF 38%, #90BBFF 28%);
+  --mb-region-main-gradient: radial-gradient(circle at 16% 12%, color-mix(in oklch, #58B8FF 68%, white 32%) 0, transparent 38%), radial-gradient(circle at 76% 72%, color-mix(in oklch, #74DFFF 70%, white 30%) 0, transparent 44%), radial-gradient(circle at 88% 10%, color-mix(in oklch, #90BBFF 60%, white 40%) 0, transparent 34%), linear-gradient(135deg, color-mix(in oklch, #58B8FF 42%, white 58%), color-mix(in oklch, #90BBFF 38%, white 62%) 45%, color-mix(in oklch, #74DFFF 44%, white 56%));
+  --mb-region-main-surface: color-mix(in oklch, white 68%, #74DFFF 32%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #58B8FF 30%, #74DFFF 32%);
+  --mb-region-main-border: color-mix(in oklch, #58B8FF 34%, #90BBFF 24%);
+  --mb-region-main-hover: color-mix(in oklch, #74DFFF 42%, white 58%);
+  --mb-region-main-active: color-mix(in oklch, #58B8FF 38%, #90BBFF 28%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(24% 0.014 235) 78%, #58B8FF 22%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(32% 0.014 235) 74%, #74DFFF 26%);
+  --mb-region-chrome-border: color-mix(in oklch, #58B8FF 34%, oklch(46% 0.014 235));
+  --mb-region-chrome-muted: color-mix(in oklch, #74DFFF 42%, white 58%);
+  --mb-region-main-accent: #58B8FF;
+}
+
+.ui-next-shell[data-region-tone="lime-mint"] {
+  --mb-region-sidebar-bg: oklch(17% 0.018 205);
+  --mb-region-sidebar-border: color-mix(in oklch, #B1FFEC 42%, oklch(30% 0.018 205));
+  --mb-region-main-bg: color-mix(in oklch, #CEF595 40%, #B1FFEC 30%);
+  --mb-region-main-gradient: radial-gradient(circle at 14% 11%, color-mix(in oklch, #CEF595 72%, white 28%) 0, transparent 38%), radial-gradient(circle at 76% 74%, color-mix(in oklch, #B1FFEC 70%, white 30%) 0, transparent 44%), radial-gradient(circle at 84% 12%, color-mix(in oklch, #FFE588 70%, white 30%) 0, transparent 34%), linear-gradient(135deg, color-mix(in oklch, #CEF595 42%, white 58%), color-mix(in oklch, #B1FFEC 44%, white 56%) 50%, color-mix(in oklch, #FFE588 36%, white 64%));
+  --mb-region-main-surface: color-mix(in oklch, white 68%, #B1FFEC 32%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #CEF595 34%, #B1FFEC 30%);
+  --mb-region-main-border: color-mix(in oklch, #B1FFEC 34%, #CEF595 24%);
+  --mb-region-main-hover: color-mix(in oklch, #B1FFEC 42%, white 58%);
+  --mb-region-main-active: color-mix(in oklch, #CEF595 36%, #FFE588 30%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(24% 0.014 205) 78%, #B1FFEC 22%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(32% 0.014 205) 74%, #CEF595 26%);
+  --mb-region-chrome-border: color-mix(in oklch, #B1FFEC 32%, oklch(45% 0.014 205));
+  --mb-region-chrome-muted: color-mix(in oklch, #FFE588 34%, white 66%);
+  --mb-region-main-accent: #CEF595;
+}
+
+body.ui-next-app:has(.ui-next-shell) {
+  --mb-region-main-accent: #FF5391;
+  --mb-region-main-surface: color-mix(in oklch, #FFF4F5 70%, #FFB09C 30%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #FFB09C 45%, #FF9CDA 24%);
+  --mb-region-main-border: color-mix(in oklch, #FF5391 34%, white 66%);
+  --mb-region-main-hover: color-mix(in oklch, #FFB09C 42%, white 58%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(23% 0.018 315) 82%, #FF5391 18%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(31% 0.020 315) 76%, #FF9CDA 24%);
+  --mb-region-chrome-border: color-mix(in oklch, #FF9CDA 32%, oklch(44% 0.018 315));
+  --mb-region-overlay-surface: color-mix(in oklch, var(--mb-region-main-surface) 76%, var(--mb-region-chrome-bg) 24%);
+  --mb-region-overlay-border: color-mix(in oklch, var(--mb-region-main-border) 72%, var(--mb-region-main-accent) 28%);
+  --mb-region-overlay-shadow: 0 18px 44px color-mix(in oklch, var(--mb-region-main-accent) 16%, transparent);
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone="lilac-sun"]) {
+  --mb-region-main-accent: #B18DFF;
+  --mb-region-main-surface: color-mix(in oklch, white 70%, #FFBB57 30%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #B18DFF 34%, #FFF443 24%);
+  --mb-region-main-border: color-mix(in oklch, #B18DFF 30%, #FFBB57 24%);
+  --mb-region-main-hover: color-mix(in oklch, #FFBB57 34%, white 66%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(24% 0.018 272) 78%, #B18DFF 22%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(32% 0.018 272) 72%, #FFBB57 28%);
+  --mb-region-chrome-border: color-mix(in oklch, #B18DFF 34%, oklch(45% 0.014 272));
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone="candy-violet"]) {
+  --mb-region-main-accent: #5240FE;
+  --mb-region-main-surface: color-mix(in oklch, white 68%, #AD9EFF 32%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #FD91FF 32%, #5240FE 20%);
+  --mb-region-main-border: color-mix(in oklch, #5240FE 28%, #FD91FF 24%);
+  --mb-region-main-hover: color-mix(in oklch, #AD9EFF 38%, white 62%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(22% 0.022 275) 78%, #5240FE 22%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(31% 0.020 275) 72%, #AD9EFF 28%);
+  --mb-region-chrome-border: color-mix(in oklch, #AD9EFF 34%, oklch(45% 0.014 275));
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone="apricot-sky"]) {
+  --mb-region-main-accent: #87BDFF;
+  --mb-region-main-surface: color-mix(in oklch, white 70%, #DBEAFF 30%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #FFC870 34%, #87BDFF 24%);
+  --mb-region-main-border: color-mix(in oklch, #87BDFF 32%, #FFC870 22%);
+  --mb-region-main-hover: color-mix(in oklch, #DBEAFF 55%, white 45%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(25% 0.014 240) 80%, #87BDFF 20%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(33% 0.014 240) 74%, #FFC870 26%);
+  --mb-region-chrome-border: color-mix(in oklch, #87BDFF 34%, oklch(45% 0.014 240));
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone="aqua-dream"]) {
+  --mb-region-main-accent: #58B8FF;
+  --mb-region-main-surface: color-mix(in oklch, white 68%, #74DFFF 32%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #58B8FF 30%, #74DFFF 32%);
+  --mb-region-main-border: color-mix(in oklch, #58B8FF 34%, #90BBFF 24%);
+  --mb-region-main-hover: color-mix(in oklch, #74DFFF 42%, white 58%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(24% 0.014 235) 78%, #58B8FF 22%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(32% 0.014 235) 74%, #74DFFF 26%);
+  --mb-region-chrome-border: color-mix(in oklch, #58B8FF 34%, oklch(46% 0.014 235));
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone="lime-mint"]) {
+  --mb-region-main-accent: #CEF595;
+  --mb-region-main-surface: color-mix(in oklch, white 68%, #B1FFEC 32%);
+  --mb-region-main-surface-soft: color-mix(in oklch, #CEF595 34%, #B1FFEC 30%);
+  --mb-region-main-border: color-mix(in oklch, #B1FFEC 34%, #CEF595 24%);
+  --mb-region-main-hover: color-mix(in oklch, #B1FFEC 42%, white 58%);
+  --mb-region-chrome-bg: color-mix(in oklch, oklch(24% 0.014 205) 78%, #B1FFEC 22%);
+  --mb-region-chrome-surface: color-mix(in oklch, oklch(32% 0.014 205) 74%, #CEF595 26%);
+  --mb-region-chrome-border: color-mix(in oklch, #B1FFEC 32%, oklch(45% 0.014 205));
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) {
+  --mb-region-overlay-surface: color-mix(in oklch, var(--mb-region-main-surface) 76%, var(--mb-region-chrome-bg) 24%);
+  --mb-region-overlay-border: color-mix(in oklch, var(--mb-region-main-border) 72%, var(--mb-region-main-accent) 28%);
+  --mb-region-overlay-shadow: 0 18px 44px color-mix(in oklch, var(--mb-region-main-accent) 16%, transparent);
+}
+
+.ui-next-shell {
+  --mb-coral: var(--mb-region-main-accent);
+  --mb-coral-hover: color-mix(in oklch, var(--mb-region-main-accent) 88%, oklch(100% 0 0) 12%);
+  --mb-coral-press: color-mix(in oklch, var(--mb-region-main-accent) 82%, oklch(0% 0 0) 18%);
+  --mb-rose: var(--mb-region-main-accent);
+  --mb-rose-bg: color-mix(in oklch, var(--mb-region-main-accent) 16%, transparent);
+  --mb-topbar-accent: var(--mb-region-main-accent);
+  --mb-playerbar-accent: var(--mb-region-main-accent);
+  background: var(--mb-region-main-gradient, var(--mb-region-main-bg));
+  background-size: 145% 145%;
+  animation: mb-region-gradient-drift 18s ease-in-out infinite alternate;
+}
+
+.mb-sidebar {
+  background:
+    radial-gradient(circle at 20% 12%, color-mix(in oklch, var(--mb-region-main-accent) 34%, transparent), transparent 42%),
+    radial-gradient(circle at 80% 78%, color-mix(in oklch, var(--mb-region-main-surface-soft) 24%, transparent), transparent 46%),
+    linear-gradient(180deg, color-mix(in oklch, var(--mb-region-sidebar-bg) 82%, var(--mb-region-main-accent) 18%), var(--mb-region-sidebar-bg));
+  border-right-color: var(--mb-region-sidebar-border);
+  background-size: 140% 140%;
+  animation: mb-region-gradient-drift 22s ease-in-out infinite alternate;
+}
+
+.mb-sidebar__head,
+.mb-sidebar__foot {
+  border-color: var(--mb-region-sidebar-border);
+}
+
+.mb-sidebar .mb-nav-item {
+  color: oklch(82% 0.012 248);
+}
+
+.mb-sidebar .mb-nav-item:hover {
+  background: oklch(22% 0.018 248);
+  color: oklch(96% 0.006 248);
+}
+
+.mb-sidebar .mb-nav-item.is-active {
+  background: color-mix(in oklch, var(--mb-region-sidebar-bg) 72%, var(--mb-region-main-accent) 28%);
+  color: oklch(98% 0.006 238);
+}
+
+.mb-sidebar .mb-nav-item.is-active::before {
+  background: var(--mb-region-main-accent);
+}
+
+.mb-content {
+  --mb-bg: var(--mb-region-main-bg);
+  --mb-bg-elevated: var(--mb-region-main-surface);
+  --mb-bg-surface: var(--mb-region-main-surface);
+  --mb-bg-hover: var(--mb-region-main-hover);
+  --mb-bg-active: var(--mb-region-main-active);
+  --mb-border: var(--mb-region-main-border);
+  --mb-border-subtle: oklch(84% 0.012 238);
+  --mb-text: oklch(18% 0.013 238);
+  --mb-text-2: oklch(39% 0.014 238);
+  --mb-text-3: oklch(54% 0.013 238);
+  --mb-text-4: oklch(66% 0.012 238);
+  --mb-home-surface: var(--mb-region-main-surface);
+  --mb-home-surface-soft: var(--mb-region-main-surface-soft);
+  --mb-home-border-soft: var(--mb-region-main-border);
+  --mb-home-depth-surface: var(--mb-region-main-surface);
+  --mb-home-depth-border: var(--mb-region-main-border);
+  --mb-home-rhythm-surface: var(--mb-region-main-surface);
+  --mb-home-rhythm-border: var(--mb-region-main-border);
+  --mb-home-focus-ring: var(--mb-region-main-accent, oklch(68% 0.07 215));
+  --mb-home-recommend-accent: var(--mb-region-main-accent, oklch(68% 0.07 215));
+  background: var(--mb-region-main-gradient, var(--mb-region-main-bg));
+  background-attachment: fixed;
+  background-size: 150% 150%;
+  animation: mb-region-gradient-drift 20s ease-in-out infinite alternate;
+  color: var(--mb-text);
+}
+
+.mb-content::before {
+  content: "";
+  position: fixed;
+  inset: var(--mb-topbar-h) 0 var(--mb-playerbar-h) var(--mb-sidebar-w);
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 18%, color-mix(in oklch, var(--mb-region-main-accent) 18%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in oklch, white 26%, transparent), transparent 44%);
+  opacity: .72;
+  animation: mb-region-glow-drift 24s ease-in-out infinite alternate;
+}
+
+.mb-content .mb-daily-desktop,
+.mb-content .mb-section,
+.mb-content .mb-daily-hero,
+.mb-content .mb-daily-sync,
+.mb-content .mb-daily-rail,
+.mb-content .mb-playlist-rail {
+  background: color-mix(in oklch, var(--mb-region-main-surface) 78%, transparent);
+  border-color: var(--mb-region-main-border);
+  color: var(--mb-text);
+  box-shadow: 0 14px 32px color-mix(in oklch, var(--mb-region-main-accent) 18%, transparent);
+}
+
+.mb-content .mb-daily-track,
+.mb-content .mb-track-row-compact,
+.mb-content .mb-album-card {
+  color: var(--mb-text);
+}
+
+.mb-content .mb-daily-track:hover,
+.mb-content .mb-track-row-compact:hover,
+.mb-content .mb-album-card:hover {
+  background: var(--mb-region-main-hover);
+}
+
+.mb-topbar {
+  background:
+    radial-gradient(circle at 24% 0%, color-mix(in oklch, var(--mb-region-main-accent) 30%, transparent), transparent 48%),
+    linear-gradient(90deg, color-mix(in oklch, var(--mb-region-chrome-bg) 78%, var(--mb-region-main-surface-soft) 22%), var(--mb-region-chrome-bg));
+  border-bottom-color: var(--mb-region-chrome-border);
+  background-size: 140% 140%;
+  animation: mb-region-gradient-drift 24s ease-in-out infinite alternate;
+}
+
+.mb-topbar .mb-icon-btn,
+.mb-window-btn {
+  color: var(--mb-region-chrome-muted);
+}
+
+.mb-topbar .mb-icon-btn:hover:not(:disabled),
+.mb-window-btn:hover {
+  background: var(--mb-region-chrome-surface);
+  color: oklch(96% 0.006 238);
+}
+
+.mb-search__box,
+.mb-netease-account-trigger {
+  background: var(--mb-region-chrome-surface);
+  border-color: var(--mb-region-chrome-border);
+}
+
+.mb-player:not(.mb-player--sonic-topography) {
+  background:
+    radial-gradient(circle at 18% 50%, color-mix(in oklch, var(--mb-region-main-accent) 26%, transparent), transparent 36%),
+    radial-gradient(circle at 82% 50%, color-mix(in oklch, var(--mb-region-main-surface-soft) 22%, transparent), transparent 40%),
+    linear-gradient(90deg, var(--mb-region-chrome-bg), color-mix(in oklch, var(--mb-region-chrome-bg) 78%, var(--mb-region-main-accent) 22%));
+  border-top-color: var(--mb-region-chrome-border);
+  background-size: 145% 145%;
+  animation: mb-region-gradient-drift 21s ease-in-out infinite alternate;
+}
+
+.mb-player:not(.mb-player--sonic-topography) .mb-player__artist,
+.mb-player:not(.mb-player--sonic-topography) .mb-player__time,
+.mb-player:not(.mb-player--sonic-topography) .mb-player__status-chip,
+.mb-player:not(.mb-player--sonic-topography) .mb-icon-btn {
+  color: var(--mb-region-chrome-muted);
+}
+
+.mb-player:not(.mb-player--sonic-topography) .mb-icon-btn:hover:not(:disabled) {
+  background: var(--mb-region-chrome-surface);
+  border-color: var(--mb-region-chrome-border);
+  color: oklch(96% 0.006 238);
+}
+
+.mb-player:not(.mb-player--sonic-topography) .mb-slider__track {
+  background: oklch(22% 0.010 238);
+}
+
+.mb-player:not(.mb-player--sonic-topography) .mb-player__play,
+.mb-player:not(.mb-player--sonic-topography) .mb-slider__fill,
+.mb-player:not(.mb-player--sonic-topography) .mb-queue-btn__badge {
+  background: var(--mb-region-main-accent);
+}
+
+.mb-player:not(.mb-player--sonic-topography) .mb-icon-btn.is-active,
+.mb-player:not(.mb-player--sonic-topography) .mb-player__like.is-liked,
+.mb-player:not(.mb-player--sonic-topography) .mb-player__like:hover {
+  color: var(--mb-region-main-accent);
+}
+
+@keyframes mb-region-gradient-drift {
+  0% {
+    background-position: 0% 18%;
+  }
+  50% {
+    background-position: 72% 42%;
+  }
+  100% {
+    background-position: 100% 82%;
+  }
+}
+
+@keyframes mb-region-glow-drift {
+  0% {
+    opacity: .52;
+    transform: translate3d(-1.4%, -1%, 0) scale(1);
+  }
+  100% {
+    opacity: .82;
+    transform: translate3d(1.8%, 1.2%, 0) scale(1.035);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-next-shell,
+  .mb-sidebar,
+  .mb-content,
+  .mb-content::before,
+  .mb-topbar,
+  .mb-player:not(.mb-player--sonic-topography) {
+    animation: none;
+  }
+}
+/* end Stage 55 region tone map */
+
+/* Stage 57 theme adaptation */
+.ui-next-shell {
+  --mb-region-overlay-surface: color-mix(in oklch, var(--mb-region-main-surface) 76%, var(--mb-region-chrome-bg) 24%);
+  --mb-region-overlay-border: color-mix(in oklch, var(--mb-region-main-border) 72%, var(--mb-region-main-accent) 28%);
+  --mb-region-overlay-shadow: 0 18px 44px color-mix(in oklch, var(--mb-region-main-accent) 16%, transparent);
+  --mb-region-control-surface: color-mix(in oklch, var(--mb-region-main-surface) 72%, transparent);
+  --mb-region-control-hover: color-mix(in oklch, var(--mb-region-main-hover) 76%, var(--mb-region-main-accent) 12%);
+  --mb-region-track-surface: color-mix(in oklch, var(--mb-region-chrome-border) 72%, var(--mb-region-main-accent) 16%);
+  --mb-settings-surface: color-mix(in oklch, var(--mb-region-main-surface) 72%, transparent);
+  --mb-settings-control-surface: color-mix(in oklch, var(--mb-region-main-surface) 62%, transparent);
+  --mb-settings-border: var(--mb-region-main-border);
+  --mb-settings-muted: var(--mb-text-3);
+  --mb-settings-accent: var(--mb-region-main-accent);
+  --mb-settings-danger: var(--mb-rose);
+  --mb-playlist-card-surface: color-mix(in oklch, var(--mb-region-main-surface) 74%, transparent);
+  --mb-playlist-card-border: var(--mb-region-main-border);
+  --mb-playlist-card-accent: var(--mb-region-main-accent);
+  --mb-playlist-card-shadow: 0 14px 34px color-mix(in oklch, var(--mb-region-main-accent) 16%, transparent);
+  --mb-daily-track-border: var(--mb-region-main-border);
+  --mb-daily-track-accent: var(--mb-region-main-accent);
+  --mb-daily-track-muted: var(--mb-text-3);
+  --mb-playlist-detail-surface: color-mix(in oklch, var(--mb-region-main-surface) 78%, transparent);
+  --mb-playlist-detail-border: var(--mb-region-main-border);
+  --mb-playlist-detail-accent: var(--mb-region-main-accent);
+  --mb-playlist-detail-muted: var(--mb-text-3);
+  --mb-search-results-surface: color-mix(in oklch, var(--mb-region-main-surface) 78%, transparent);
+  --mb-search-results-border: var(--mb-region-main-border);
+  --mb-search-results-accent: var(--mb-region-main-accent);
+  --mb-search-results-muted: var(--mb-text-3);
+  --mb-queue-panel-surface: color-mix(in oklch, var(--mb-region-overlay-surface) 88%, transparent);
+  --mb-queue-panel-border: var(--mb-region-overlay-border);
+  --mb-queue-panel-accent: var(--mb-region-main-accent);
+  --mb-queue-panel-muted: var(--mb-region-chrome-muted);
+  --mb-song-detail-surface: color-mix(in oklch, var(--mb-region-overlay-surface) 90%, transparent);
+  --mb-song-detail-border: var(--mb-region-overlay-border);
+  --mb-song-detail-accent: var(--mb-region-main-accent);
+  --mb-song-detail-muted: var(--mb-region-chrome-muted);
+  --mb-netease-menu-surface: color-mix(in oklch, var(--mb-region-overlay-surface) 88%, transparent);
+  --mb-netease-menu-border: var(--mb-region-overlay-border);
+  --mb-netease-menu-accent: var(--mb-region-main-accent);
+  --mb-netease-menu-muted: var(--mb-region-chrome-muted);
+  --mb-topbar-search: color-mix(in oklch, var(--mb-region-chrome-surface) 74%, var(--mb-region-main-accent) 14%);
+  --mb-shell-panel: var(--mb-region-chrome-surface);
+  --mb-shell-panel-soft: color-mix(in oklch, var(--mb-region-chrome-surface) 76%, var(--mb-region-main-accent) 14%);
+  --mb-shell-border: var(--mb-region-chrome-border);
+  --mb-shell-muted: var(--mb-region-chrome-muted);
+  --mb-shell-accent: var(--mb-region-main-accent);
+  --mb-home-stage33-surface: color-mix(in oklch, var(--mb-region-main-surface) 74%, transparent);
+  --mb-home-stage33-border: var(--mb-region-main-border);
+  --mb-home-stage33-accent: var(--mb-region-main-accent);
+  --mb-home-stage33-muted: var(--mb-text-3);
+  --mb-home-stage34-surface: color-mix(in oklch, var(--mb-region-main-surface) 78%, transparent);
+  --mb-home-stage34-border: var(--mb-region-main-border);
+  --mb-home-stage34-accent: var(--mb-region-main-accent);
+  --mb-home-stage34-muted: var(--mb-text-3);
+  --mb-stage37-surface: color-mix(in oklch, var(--mb-region-main-surface) 76%, transparent);
+  --mb-stage37-surface-raised: color-mix(in oklch, var(--mb-region-main-surface) 78%, var(--mb-region-main-accent) 12%);
+  --mb-stage37-border: var(--mb-region-main-border);
+  --mb-stage37-accent: var(--mb-region-main-accent);
+  --mb-stage37-muted: var(--mb-text-3);
+  --mb-playerbar-surface: var(--mb-region-chrome-surface);
+  --mb-playerbar-border: var(--mb-region-chrome-border);
+  --mb-playerbar-accent: var(--mb-region-main-accent);
+  --mb-playerbar-muted: var(--mb-region-chrome-muted);
+  --mb-topbar-surface: var(--mb-region-chrome-surface);
+  --mb-topbar-border: var(--mb-region-chrome-border);
+  --mb-topbar-accent: var(--mb-region-main-accent);
+  --mb-topbar-muted: var(--mb-region-chrome-muted);
+  --mb-daily-track-surface: color-mix(in oklch, var(--mb-region-main-surface) 72%, transparent);
+}
+
+.ui-next-shell .mb-card,
+.ui-next-shell .mb-action,
+.ui-next-shell .mb-playlist-card,
+.ui-next-shell .mb-search-section,
+.ui-next-shell .mb-settings-card,
+.ui-next-shell .mb-onboarding,
+.ui-next-shell .mb-onboarding__choice,
+.ui-next-shell .mb-migration-metric,
+.ui-next-shell .mb-migration-sync,
+.ui-next-shell .mb-migration-report,
+.ui-next-shell .mb-migration-report__counts span,
+.ui-next-shell .mb-migration-diagnostics__item,
+.ui-next-shell .mb-migration-diagnostics__copy,
+.ui-next-shell .mb-migration-diagnostics__text,
+.ui-next-shell .mb-migration-habit__metric,
+.ui-next-shell .mb-migration-habit__actions,
+.ui-next-shell .mb-migration-habit__action,
+.ui-next-shell .mb-pl-cache-summary__item,
+.ui-next-shell .mb-pl-status,
+.ui-next-shell .mb-pl-empty,
+.ui-next-shell .mb-confirm,
+.ui-next-shell .mb-playlist-context-menu,
+.ui-next-shell .mb-search-term {
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--mb-region-main-accent) 8%, transparent), transparent 46%),
+    color-mix(in oklch, var(--mb-region-main-surface) 74%, transparent);
+  border-color: var(--mb-region-main-border);
+  color: var(--mb-text);
+  box-shadow: 0 12px 30px color-mix(in oklch, var(--mb-region-main-accent) 12%, transparent);
+}
+
+.ui-next-shell .mb-card:hover,
+.ui-next-shell .mb-action:hover,
+.ui-next-shell .mb-playlist-card:hover,
+.ui-next-shell .mb-search-section:hover,
+.ui-next-shell .mb-settings-card:hover,
+.ui-next-shell .mb-search-term:hover {
+  background: color-mix(in oklch, var(--mb-region-main-surface) 78%, var(--mb-region-main-accent) 14%);
+  border-color: color-mix(in oklch, var(--mb-region-main-border) 62%, var(--mb-region-main-accent) 38%);
+}
+
+.mb-settings-panel {
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--mb-settings-accent) 10%, transparent), transparent 44%),
+    var(--mb-settings-surface);
+  border-color: var(--mb-settings-border);
+  box-shadow: 0 10px 28px color-mix(in oklch, var(--mb-region-main-accent) 12%, transparent);
+}
+
+.mb-settings-panel__head,
+.mb-settings-row,
+.mb-settings-path,
+.mb-settings-folder,
+.mb-settings-empty,
+.mb-settings-cache-note,
+.mb-settings-inline-actions {
+  border-color: color-mix(in oklch, var(--mb-settings-border) 70%, transparent);
+}
+
+.mb-settings-select,
+.mb-settings-color,
+.mb-settings-mini-action,
+.mb-settings-action,
+.mb-settings-switch__track {
+  background: var(--mb-settings-control-surface);
+  border-color: var(--mb-settings-border);
+}
+
+.mb-settings-select,
+.mb-settings-range {
+  accent-color: var(--mb-settings-accent);
+}
+
+.mb-settings-action:hover,
+.mb-settings-mini-action:hover,
+.mb-settings-select:hover {
+  background: var(--mb-region-control-hover);
+  border-color: color-mix(in oklch, var(--mb-settings-accent) 42%, var(--mb-settings-border));
+}
+
+.mb-settings-switch__input:checked + .mb-settings-switch__track {
+  background: color-mix(in oklch, var(--mb-settings-accent) 34%, var(--mb-region-main-surface));
+  border-color: var(--mb-settings-accent);
+}
+
+.mb-settings-switch__input:checked + .mb-settings-switch__track .mb-settings-switch__thumb {
+  background: var(--mb-settings-accent);
+}
+
+.mb-settings-card {
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--mb-region-main-accent) 8%, transparent), transparent 42%),
+    color-mix(in oklch, var(--mb-region-main-surface) 74%, transparent);
+  border-color: var(--mb-region-main-border);
+}
+
+.mb-settings-card:hover {
+  background: color-mix(in oklch, var(--mb-region-main-surface) 78%, var(--mb-region-main-accent) 14%);
+  border-color: color-mix(in oklch, var(--mb-region-main-border) 62%, var(--mb-region-main-accent) 38%);
+}
+
+.mb-pl-header,
+.mb-tracklist,
+.mb-tracklist__head,
+.mb-track-row__status-chip,
+.mb-pl-cache-summary__item,
+.mb-pl-status,
+.mb-pl-empty,
+.mb-content__inner > .mb-search-results__head ~ .mb-section,
+.mb-search-results__head,
+.mb-search-entity,
+.mb-search-entity__open,
+.mb-search-result-row,
+.mb-search-term,
+.mb-empty {
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--mb-region-main-accent) 10%, transparent), transparent 46%),
+    color-mix(in oklch, var(--mb-region-main-surface) 76%, transparent);
+  border-color: var(--mb-region-main-border);
+}
+
+.mb-tracklist .mb-track-row:hover,
+.mb-search-results__head ~ .mb-section .mb-track-row.is-current,
+.mb-search__filter.is-active,
+.mb-search-entity:hover,
+.mb-search-entity__open:hover,
+.mb-search-result-row:hover,
+.mb-search-result-row.is-selected,
+.mb-track-row:hover,
+.mb-track-row.is-current {
+  background: color-mix(in oklch, var(--mb-region-main-surface) 72%, var(--mb-region-main-accent) 18%);
+}
+
+.mb-search__filter.is-active,
+.mb-search-result-row.is-selected {
+  color: var(--mb-region-main-accent);
+  border-color: color-mix(in oklch, var(--mb-region-main-border) 56%, var(--mb-region-main-accent) 44%);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--mb-region-main-accent) 34%, transparent);
+}
+
+.mb-tracklist__head {
+  background: color-mix(in oklch, var(--mb-region-main-surface) 88%, transparent);
+}
+
+.mb-track-row__action:hover,
+.mb-track-row__like:hover,
+.mb-queue__clear:hover,
+.mb-queue-item__remove:hover,
+.mb-search-result-row__action:hover {
+  background: color-mix(in oklch, var(--mb-region-main-accent) 16%, var(--mb-region-main-surface));
+  color: var(--mb-region-main-accent);
+}
+
+.mb-playlist-rail .mb-album-card,
+.mb-album-card {
+  background: color-mix(in oklch, var(--mb-region-main-surface) 72%, transparent);
+  border-color: var(--mb-region-main-border);
+}
+
+.mb-playlist-rail .mb-album-card:hover,
+.mb-album-card:hover {
+  background: color-mix(in oklch, var(--mb-region-main-surface) 78%, var(--mb-region-main-accent) 12%);
+  border-color: color-mix(in oklch, var(--mb-region-main-border) 62%, var(--mb-region-main-accent) 38%);
+  box-shadow: 0 14px 34px color-mix(in oklch, var(--mb-region-main-accent) 16%, transparent);
+}
+
+.mb-cover.is-fallback {
+  background:
+    radial-gradient(circle at 24% 18%, color-mix(in oklch, var(--mb-region-main-accent) 38%, transparent), transparent 42%),
+    linear-gradient(135deg, var(--mb-region-main-surface-soft), var(--mb-region-main-hover), color-mix(in oklch, var(--mb-region-main-surface) 78%, var(--mb-region-main-accent) 22%));
+}
+
+.mb-cover__play {
+  background: var(--mb-region-main-accent);
+  color: oklch(18% 0.014 238);
+  box-shadow: 0 4px 12px color-mix(in oklch, var(--mb-region-main-accent) 20%, transparent);
+}
+
+.mb-cover__play:hover {
+  background: color-mix(in oklch, var(--mb-region-main-accent) 88%, oklch(100% 0 0) 12%);
+}
+
+.mb-pl-status__spinner {
+  border-color: color-mix(in oklch, var(--mb-region-main-accent) 22%, transparent);
+  border-top-color: var(--mb-region-main-accent);
+}
+
+.mb-pl-status__mark {
+  background: color-mix(in oklch, var(--mb-region-main-accent) 18%, var(--mb-region-main-surface));
+  color: var(--mb-region-main-accent);
+}
+
+.mb-src-badge--local,
+.mb-src-badge--netease {
+  color: var(--mb-region-main-accent);
+  background: color-mix(in oklch, var(--mb-region-main-accent) 12%, transparent);
+}
+
+.mb-src-badge--local::before,
+.mb-src-badge--netease::before {
+  background: var(--mb-region-main-accent);
+}
+
+.mb-confirm-backdrop,
+.mb-song-detail__backdrop {
+  background: color-mix(in oklch, var(--mb-region-chrome-bg) 54%, transparent);
+}
+
+.mb-confirm {
+  background:
+    radial-gradient(circle at 16% 0%, color-mix(in oklch, var(--mb-region-main-accent) 18%, transparent), transparent 42%),
+    var(--mb-region-overlay-surface);
+  border-color: var(--mb-region-overlay-border);
+  box-shadow: var(--mb-region-overlay-shadow);
+}
+
+.mb-confirm__mark {
+  background: color-mix(in oklch, var(--mb-region-main-accent) 16%, transparent);
+  color: var(--mb-region-main-accent);
+}
+
+.mb-playlist-context-menu {
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in oklch, var(--mb-region-main-accent) 18%, transparent), transparent 42%),
+    var(--mb-region-overlay-surface);
+  border-color: var(--mb-region-overlay-border);
+  box-shadow: var(--mb-region-overlay-shadow);
+}
+
+.mb-playlist-context-menu__item:hover,
+.mb-playlist-context-menu__item:focus-visible {
+  background: color-mix(in oklch, var(--mb-region-overlay-surface) 72%, var(--mb-region-main-accent) 18%);
+}
+
+.mb-search-panel,
+.mb-netease-menu,
+.mb-queue,
+.mb-song-detail__panel {
+  background:
+    radial-gradient(circle at 18% 8%, color-mix(in oklch, var(--mb-region-main-accent) 20%, transparent), transparent 42%),
+    var(--mb-region-overlay-surface);
+  border-color: var(--mb-region-overlay-border);
+  box-shadow: var(--mb-region-overlay-shadow);
+}
+
+.mb-netease-menu__head,
+.mb-netease-menu__sync,
+.mb-netease-menu__section,
+.mb-queue__head,
+.mb-queue__foot,
+.mb-song-detail__head,
+.mb-song-detail__section {
+  border-color: var(--mb-region-overlay-border);
+}
+
+.mb-netease-menu__profile,
+.mb-netease-menu__status,
+.mb-netease-menu__action,
+.mb-netease-menu__asset,
+.mb-netease-menu__status-row,
+.mb-netease-menu__actions button,
+.mb-queue__count,
+.mb-queue__clear,
+.mb-queue-item:hover,
+.mb-queue-item.is-current,
+.mb-queue-item__remove,
+.mb-song-detail__hero,
+.mb-song-detail__fact,
+.mb-song-detail__close,
+.mb-song-detail__similar-row:hover {
+  background: color-mix(in oklch, var(--mb-region-overlay-surface) 72%, var(--mb-region-main-accent) 16%);
+  border-color: var(--mb-region-overlay-border);
+}
+
+.mb-netease-menu__actions button:hover,
+.mb-queue__clear:hover,
+.mb-queue-item__remove:hover,
+.mb-song-detail__close:hover {
+  background: color-mix(in oklch, var(--mb-region-overlay-surface) 68%, var(--mb-region-main-accent) 24%);
+  border-color: color-mix(in oklch, var(--mb-region-overlay-border) 60%, var(--mb-region-main-accent) 40%);
+}
+
+.mb-player:not(.mb-player--sonic-topography) .mb-slider__track {
+  background: var(--mb-region-track-surface);
+}
+
+.mb-player:not(.mb-player--sonic-topography) .mb-slider__fill,
+.mb-player:not(.mb-player--sonic-topography) .mb-slider--volume .mb-slider__fill {
+  background: var(--mb-region-main-accent);
+}
+
+.mb-player:not(.mb-player--sonic-topography) .mb-slider__thumb {
+  background: var(--mb-region-main-accent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--mb-region-main-accent) 18%, transparent);
+}
+
+.mb-player:not(.mb-player--sonic-topography) .mb-player__cover-btn:hover,
+.mb-player:not(.mb-player--sonic-topography) .mb-player__detail:hover {
+  border-color: color-mix(in oklch, var(--mb-region-chrome-border) 62%, var(--mb-region-main-accent) 38%);
+  background: color-mix(in oklch, var(--mb-region-chrome-surface) 70%, var(--mb-region-main-accent) 18%);
+  color: var(--mb-region-main-accent);
+}
+
+.mb-search__box,
+.mb-search__box.is-focused,
+.mb-netease-account-trigger,
+.mb-netease-account-trigger:hover,
+.mb-netease-account-trigger.is-open,
+.mb-topbar .mb-icon-btn:hover:not(:disabled),
+.mb-window-btn:hover {
+  background: color-mix(in oklch, var(--mb-region-chrome-surface) 70%, var(--mb-region-main-accent) 18%);
+  border-color: color-mix(in oklch, var(--mb-region-chrome-border) 68%, var(--mb-region-main-accent) 32%);
+}
+
+.mb-daily-track:hover,
+.mb-daily-insight__icon,
+.mb-btn--danger:hover {
+  background: color-mix(in oklch, var(--mb-region-main-accent) 18%, var(--mb-region-main-surface));
+}
+
+.mb-btn,
+.mb-btn--ghost,
+.mb-settings-mini-action,
+.mb-settings-action,
+.mb-migration-diagnostics__copy {
+  background: color-mix(in oklch, var(--mb-region-main-surface) 70%, transparent);
+  border-color: var(--mb-region-main-border);
+}
+
+.mb-btn:hover,
+.mb-btn--ghost:hover,
+.mb-settings-mini-action:hover,
+.mb-settings-action:hover,
+.mb-migration-diagnostics__copy:hover {
+  background: color-mix(in oklch, var(--mb-region-main-surface) 72%, var(--mb-region-main-accent) 18%);
+  border-color: color-mix(in oklch, var(--mb-region-main-border) 62%, var(--mb-region-main-accent) 38%);
+}
+
+.mb-btn--primary,
+.mb-song-detail__actions .mb-btn--primary,
+.mb-netease-menu__action--primary,
+.mb-tracklist__load-more {
+  background: var(--mb-region-main-accent) !important;
+  border-color: var(--mb-region-main-accent) !important;
+  color: oklch(18% 0.014 238) !important;
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-login-modal,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #add-to-playlist-dialog,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog,
+#netease-import-modal.netease-import-control-modal {
+  background: color-mix(in oklch, var(--mb-region-chrome-bg) 56%, transparent);
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-login-modal .modal-dialog,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .modal-dialog,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #add-to-playlist-dialog .modal-dialog,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .modal-dialog,
+#netease-import-modal.netease-import-control-modal .modal-dialog {
+  background:
+    radial-gradient(circle at 14% 0%, color-mix(in oklch, var(--mb-region-main-accent) 18%, transparent), transparent 42%),
+    var(--mb-region-overlay-surface);
+  border-color: var(--mb-region-overlay-border);
+  color: var(--mb-text);
+  box-shadow: var(--mb-region-overlay-shadow);
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-login-modal .modal-header,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .modal-header,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #add-to-playlist-dialog .modal-header,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .modal-header,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .modal-footer,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .modal-footer,
+#netease-import-modal.netease-import-control-modal .modal-header,
+#netease-import-modal.netease-import-control-modal .modal-footer {
+  border-color: var(--mb-region-overlay-border);
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-status,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-tracks,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .form-input,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .form-input,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .form-textarea,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .btn,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .btn,
+#netease-import-modal.netease-import-control-modal #netease-import-status,
+#netease-import-modal.netease-import-control-modal #netease-import-tracks,
+#netease-import-modal.netease-import-control-modal .form-input,
+#netease-import-modal.netease-import-control-modal .btn {
+  background: color-mix(in oklch, var(--mb-region-overlay-surface) 72%, var(--mb-region-main-accent) 12%);
+  border-color: var(--mb-region-overlay-border);
+  color: var(--mb-text);
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .btn:hover,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .btn:hover,
+#netease-import-modal.netease-import-control-modal .btn:hover {
+  background: color-mix(in oklch, var(--mb-region-overlay-surface) 68%, var(--mb-region-main-accent) 22%);
+}
+
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .btn-primary,
+body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .btn-primary,
+#netease-import-modal.netease-import-control-modal .btn-primary {
+  background: var(--mb-region-main-accent) !important;
+  border-color: var(--mb-region-main-accent) !important;
+  color: oklch(18% 0.014 238) !important;
+}
+
+.ui-next-shell.is-immersive > .mb-queue-overlay > .mb-queue {
+  background:
+    radial-gradient(circle at 18% 8%, color-mix(in oklch, var(--mb-region-main-accent) 20%, transparent), transparent 42%),
+    var(--mb-region-overlay-surface);
+  border-color: var(--mb-region-overlay-border);
+  box-shadow: var(--mb-region-overlay-shadow);
+}
+
+.mb-startup-error__skip,
+.mb-sidebar .mb-brand__logo,
+.mb-immersive__style-trigger,
+.mb-immersive__style-panel,
+.mb-immersive__style-close,
+.mb-immersive__bg-tabs,
+.mb-immersive__bg-tab,
+.mb-immersive__style-panel .mb-immersive__mode,
+.mb-immersive__style-chip,
+.mb-immersive__cache-head span:last-child,
+.mb-immersive__cache-item,
+.mb-immersive__cache-edit-input,
+.mb-immersive__cache-action,
+.mb-immersive__cache-empty {
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--mb-region-main-accent) 10%, transparent), transparent 46%),
+    color-mix(in oklch, var(--mb-region-main-surface) 76%, transparent);
+  border-color: var(--mb-region-main-border);
+  color: var(--mb-text);
+}
+
+.mb-immersive__style-panel {
+  box-shadow: 0 26px 70px color-mix(in oklch, var(--mb-region-main-accent) 18%, transparent);
+}
+
+.mb-immersive__style-kicker,
+.mb-immersive__style-label,
+.mb-immersive__cache-head,
+.mb-immersive__style-close {
+  color: var(--mb-text-3);
+}
+
+.mb-immersive__style-title {
+  color: var(--mb-text);
+}
+
+.mb-immersive__bg-tab:hover,
+.mb-immersive__style-panel .mb-immersive__mode:hover,
+.mb-immersive__style-panel .mb-immersive__mode.is-active,
+.mb-immersive__style-chip:hover,
+.mb-immersive__style-chip.is-active,
+.mb-immersive__cache-item:hover,
+.mb-immersive__cache-action:hover,
+.mb-startup-error__skip:hover {
+  background: color-mix(in oklch, var(--mb-region-main-surface) 72%, var(--mb-region-main-accent) 18%);
+  border-color: color-mix(in oklch, var(--mb-region-main-border) 62%, var(--mb-region-main-accent) 38%);
+  color: var(--mb-region-main-accent);
+}
+
+.mb-immersive__bg-tab.is-active,
+.mb-immersive__style-chip--primary,
+.mb-sidebar .mb-brand__logo {
+  background: var(--mb-region-main-accent);
+  border-color: var(--mb-region-main-accent);
+  color: oklch(18% 0.014 238);
+}
+/* end Stage 57 theme adaptation */

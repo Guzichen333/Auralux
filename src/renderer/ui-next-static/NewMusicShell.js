@@ -104,6 +104,7 @@
         rememberPosition: false,
         desktopLyrics: true,
         playerTheme: 'default',
+        regionTone: 'peach-blush',
         systemTray: true,
         trayCloseBehavior: 'exit',
         trayStartMinimized: false
@@ -1521,6 +1522,7 @@
       ? this._renderPlaylistContextMenu(s.playlistContextMenu)
       : null;
     var confirmDialog = s.confirmDialog ? this._renderConfirmDialog(s.confirmDialog) : null;
+    this.root.setAttribute('data-region-tone', (s.settings && s.settings.regionTone) || 'peach-blush');
 
     clear(this.root, [
       withRole(sidebar, 'mb-sidebar'),
@@ -2570,6 +2572,14 @@
           settingSelect('\u64ad\u653e\u5668\u4e3b\u9898', '\u76f4\u63a5\u642c\u7528 Sonic Topography \u7684\u73bb\u7483\u5361\u7247\u4e0e\u51b7\u84dd\u8fdb\u5ea6\u6837\u5f0f\u3002', settings.playerTheme || 'default', 'playerTheme', [
             { value: 'default', label: 'Auralux' },
             { value: 'sonic-topography', label: 'Sonic Topography' }
+          ]),
+          settingSelect('界面配色', '切换左侧、主内容、顶部和播放器的区域色调。', settings.regionTone || 'peach-blush', 'regionTone', [
+            { value: 'peach-blush', label: '粉桃流光' },
+            { value: 'lilac-sun', label: '紫阳渐变' },
+            { value: 'candy-violet', label: '莓蓝梦境' },
+            { value: 'apricot-sky', label: '杏空暖蓝' },
+            { value: 'aqua-dream', label: '水蓝清透' },
+            { value: 'lime-mint', label: '青柠薄荷' }
           ]),
           settingToggle('\u542f\u52a8\u540e\u81ea\u52a8\u64ad\u653e', '\u6253\u5f00\u8f6f\u4ef6\u540e\u6062\u590d\u64ad\u653e\u72b6\u6001\u65f6\u81ea\u52a8\u7ee7\u7eed\u64ad\u653e\u3002', settings.autoplay, 'autoplay'),
           settingToggle('\u8bb0\u4f4f\u64ad\u653e\u8fdb\u5ea6', '\u91cd\u542f\u540e\u4ece\u4e0a\u6b21\u6b4c\u66f2\u4f4d\u7f6e\u7ee7\u7eed\u3002', settings.rememberPosition, 'rememberPosition'),

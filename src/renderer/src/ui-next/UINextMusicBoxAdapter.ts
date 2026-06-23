@@ -214,7 +214,6 @@ interface UINextDailyMusicDesktopState {
     continueTrack: UINextTrack | null;
     dailyRecommendations: UINextTrack[];
     recentlyObsessed: UINextTrack[];
-    offlineReady: UINextTrack[];
     syncSummary: {
         statusText: string;
         detailText: string;
@@ -231,6 +230,7 @@ type UINextSettingsKey =
     | 'autoplay'
     | 'rememberPosition'
     | 'playerTheme'
+    | 'regionTone'
     | 'desktopLyrics'
     | 'showTrackCovers'
     | 'gaplessPlayback'
@@ -258,6 +258,7 @@ interface UINextSettingsState {
     autoplay: boolean;
     rememberPosition: boolean;
     playerTheme: string;
+    regionTone: string;
     desktopLyrics: boolean;
     showTrackCovers: boolean;
     gaplessPlayback: boolean;
@@ -2760,6 +2761,7 @@ export class UINextMusicBoxAdapter {
             autoplay: typeof settings.autoplay === 'boolean' ? settings.autoplay : false,
             rememberPosition: typeof settings.rememberPosition === 'boolean' ? settings.rememberPosition : false,
             playerTheme: settings.playerTheme === 'sonic-topography' ? 'sonic-topography' : 'default',
+            regionTone: this.normalizeRegionTone(settings.regionTone),
             desktopLyrics: typeof settings.desktopLyrics === 'boolean' ? settings.desktopLyrics : true,
             showTrackCovers: typeof settings.showTrackCovers === 'boolean' ? settings.showTrackCovers : true,
             gaplessPlayback: typeof settings.gaplessPlayback === 'boolean' ? settings.gaplessPlayback : false,
@@ -2866,8 +2868,22 @@ export class UINextMusicBoxAdapter {
 
         return {
             ...settings,
-            [key]: value
+            [key]: key === 'regionTone' ? this.normalizeRegionTone(value) : value
         };
+    }
+
+    private normalizeRegionTone(value: unknown): string {
+        switch (value) {
+            case 'peach-blush':
+            case 'lilac-sun':
+            case 'candy-violet':
+            case 'apricot-sky':
+            case 'aqua-dream':
+            case 'lime-mint':
+                return value;
+            default:
+                return 'peach-blush';
+        }
     }
 
     private loadImmersiveSettingsSnapshot(options: {resetSonicBackground?: boolean} = {}): void {
@@ -3746,18 +3762,16 @@ export class UINextMusicBoxAdapter {
         const fallbackContinueTrack = this.shell.state.currentTrack || uiTracks[0] || null;
         const dailyRecommendations = this.pickDailyRecommendations(uiTracks, history, favorites, neteaseRecommendedSongs);
         const recentlyObsessed = this.pickRecentlyObsessed(history, favorites);
-        const offlineReady = this.pickOfflineReady(uiTracks);
         const syncSummary = this.buildDailySyncSummary();
 
         return {
             continueTrack: history[0] || fallbackContinueTrack,
             dailyRecommendations,
             recentlyObsessed,
-            offlineReady,
             syncSummary,
             insights: [
                 {label: '曲库', value: `${uiTracks.length} 首`},
-                {label: '离线可听', value: `${offlineReady.length} 首`},
+                {label: '我的收藏', value: `${favorites.length} 首`},
                 {label: '网易云', value: this.shell.state.neteaseSyncStatus || '未登录'}
             ]
         };
@@ -3794,13 +3808,6 @@ export class UINextMusicBoxAdapter {
             .sort((a, b) => b.count - a.count)
             .map((item) => item.track);
         return this.uniqueDailyTracks([...ranked, ...favorites]).slice(0, 8);
-    }
-
-    private pickOfflineReady(uiTracks: UINextTrack[]): UINextTrack[] {
-        return this.uniqueDailyTracks([
-            ...uiTracks.filter((track) => track.offlinePlayable && track.liked),
-            ...uiTracks.filter((track) => track.offlinePlayable)
-        ]).slice(0, 12);
     }
 
     private buildDailySyncSummary(): UINextDailyMusicDesktopState['syncSummary'] {

@@ -80,7 +80,6 @@
           playlistRail('网易云推荐歌单', o.netease, o.onOpenPlaylist)
         ]),
         trackRail('最近沉迷', daily.recentlyObsessed, o.onPlayTrack),
-        trackRail('离线可听', daily.offlineReady, o.onPlayTrack),
         syncPanel(daily.syncSummary, o.onOpenMigrationDashboard)
       ]),
       section('本地歌单', o.recommended.length, cards(o.recommended, o.onOpenPlaylist)),
@@ -98,13 +97,11 @@
     }, []);
     var dailyRecommendations = uniqueTracks([].concat(favorites, recent, recommended)).slice(0, 12);
     var recentlyObsessed = uniqueTracks([].concat(recent, favorites)).slice(0, 8);
-    var offlineReady = dailyRecommendations.filter(function (track) { return track.offlinePlayable; }).slice(0, 12);
 
     return {
       continueTrack: recent[0] || favorites[0] || dailyRecommendations[0] || null,
       dailyRecommendations: dailyRecommendations,
       recentlyObsessed: recentlyObsessed,
-      offlineReady: offlineReady,
       syncSummary: {
         statusText: '等待同步',
         detailText: '网易云资产同步状态会在这里汇总',

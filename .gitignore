@@ -66,7 +66,15 @@ scripts/verify-*.js
 !scripts/verify-ui-next-stage41-home-calm-loading.js
 !scripts/verify-ui-next-stage42-home-render-review.js
 !scripts/verify-ui-next-stage43-electron-runtime-smoke.js
+!scripts/verify-ui-next-stage52-home-layout-balance.js
+!scripts/verify-ui-next-stage53-daily-rail-layout.js
+!scripts/verify-ui-next-stage54-home-remove-offline-rail.js
+!scripts/verify-ui-next-stage55-region-tone-map.js
+!scripts/verify-ui-next-stage56-region-tone-selector.js
+!scripts/verify-ui-next-stage57-theme-adaptation.js
 !scripts/verify-stage49-publish-snapshot-sync.js
+!scripts/verify-stage50-github-publish-sync.js
+!scripts/verify-stage51-github-release-finalization.js
 electron-builder.win-test.yml
 src/renderer/src/extensions/examples/
 src/renderer/src/extensions/examples/*.zip
