@@ -1,6 +1,6 @@
 {
   "name": "auralux",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "An immersive desktop music player for local libraries and personal cloud music accounts.",
   "main": "dist/main/main.js",
   "author": {
