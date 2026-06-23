@@ -126,9 +126,20 @@ export default defineConfig({
         },
         // Copy the feature-flagged ui-next prototype as browser globals.
         {
-          src: normalizePath(path.resolve(__dirname, 'ui-next-static/*.*')),
+          src: [
+            normalizePath(path.resolve(__dirname, 'ui-next-static/*.js')),
+            '!' + normalizePath(path.resolve(__dirname, 'ui-next-static/mockData.js'))
+          ],
           dest: 'ui-next',
           rename: { stripBase: true }
+        },
+        {
+          src: [
+            normalizePath(path.resolve(__dirname, 'ui-next-static/*.*')),
+            '!' + normalizePath(path.resolve(__dirname, 'ui-next-static/*.js'))
+          ],
+          dest: 'ui-next',
+          rename: { stripBase: true },
         },
         {
           src: normalizePath(path.resolve(__dirname, 'ui-next-static/components/*')),

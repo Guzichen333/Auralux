@@ -8,3 +8,4 @@ export {netEaseSyncStateService, NetEaseSyncStateService} from './NetEaseSyncSta
 export {netEaseLocalMatchService, NetEaseLocalMatchService} from './NetEaseLocalMatchService';
 export type {NetEaseLocalMatch, NetEaseLocalMatchStatus} from './NetEaseLocalMatchService';
 export {netEaseLyricsService} from './NetEaseLyricsService';
+export {netEaseRecommendationService, NetEaseRecommendationService} from './NetEaseRecommendationService';

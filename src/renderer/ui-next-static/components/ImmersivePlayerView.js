@@ -363,22 +363,31 @@
         })
       ]),
       h('div', { class: 'mb-immersive__style-section' }, [
-        h('div', { class: 'mb-immersive__style-label' }, '\u6b4c\u8bcd\u6392\u5e03'),
-        renderModeSwitch(mode, o.onLyricsMode)
+        h('div', { class: 'mb-immersive__style-label' }, '\u64ad\u653e\u5668\u4e3b\u9898'),
+        renderBackgroundPanelSwitch(panelMode, o.onBackgroundPanelMode)
       ]),
-      h('div', { class: 'mb-immersive__style-section' }, [
-        h('div', { class: 'mb-immersive__style-label' }, '\u62fe\u97f3\u6837\u5f0f'),
-        renderVisualizerSwitch(o.visualizerStyle || 'classic', o.onVisualizerStyle)
-      ]),
-      h('div', { class: 'mb-immersive__style-section' }, [
-        h('div', { class: 'mb-immersive__style-label' }, '\u80cc\u666f'),
-        renderBackgroundPanelSwitch(panelMode, o.onBackgroundPanelMode),
-        panelMode === 'regular' ? renderRegularBackgroundActions(o) : renderSonicBackgroundActions(o),
-        panelMode === 'regular' && status !== 'idle' && statusText ? h('span', {
-          class: 'mb-immersive__bg-status mb-immersive__bg-status--' + status
-        }, statusText) : null,
-        panelMode === 'regular' ? renderCachedVideos(o, background, quality) : null
-      ])
+      panelMode === 'regular' ? [
+        h('div', { class: 'mb-immersive__style-section' }, [
+          h('div', { class: 'mb-immersive__style-label' }, '\u6b4c\u8bcd\u6392\u5e03'),
+          renderModeSwitch(mode, o.onLyricsMode)
+        ]),
+        h('div', { class: 'mb-immersive__style-section' }, [
+          h('div', { class: 'mb-immersive__style-label' }, '\u62fe\u97f3\u6837\u5f0f'),
+          renderVisualizerSwitch(o.visualizerStyle || 'classic', o.onVisualizerStyle)
+        ]),
+        h('div', { class: 'mb-immersive__style-section' }, [
+          h('div', { class: 'mb-immersive__style-label' }, '\u80cc\u666f'),
+          renderRegularBackgroundActions(o),
+          status !== 'idle' && statusText ? h('span', {
+            class: 'mb-immersive__bg-status mb-immersive__bg-status--' + status
+          }, statusText) : null,
+          renderCachedVideos(o, background, quality)
+        ])
+      ] : null,
+      panelMode === 'sonic' ? h('div', { class: 'mb-immersive__style-section' }, [
+        h('div', { class: 'mb-immersive__style-label' }, '\u58f0\u6ce2\u5730\u5f62'),
+        renderSonicBackgroundActions(o)
+      ]) : null
     ]);
   }
 

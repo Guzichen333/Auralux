@@ -83,6 +83,14 @@
             opts.onAddToQueue(t);
           }
         }, iconEl(MBIcons.plus(16))) : null,
+        opts.onOpenSongDetail ? h('button', {
+          class: 'mb-track-row__action mb-track-row__detail',
+          title: '\u6b4c\u66f2\u8be6\u60c5',
+          onclick: function (e) {
+            e.stopPropagation();
+            opts.onOpenSongDetail(t);
+          }
+        }, iconEl(MBIcons.lyrics(16))) : null,
         opts.onToggleLike ? h('button', {
           class: 'mb-track-row__action mb-track-row__like' + (t.liked ? ' is-liked' : ''),
           title: t.liked ? '\u53d6\u6d88\u6536\u85cf' : '\u6536\u85cf',

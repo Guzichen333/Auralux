@@ -202,7 +202,6 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | 'ti
 export async function runStartupWarmup(onUpdate: StartupWarmupUpdate = () => {}): Promise<StartupWarmupResult> {
     const startedAt = performance.now();
     const definitions = createTaskDefinitions();
-    const criticalTaskIds = new Set(['neteaseAvailability']);
     const tasks: StartupWarmupTaskState[] = definitions.map((task) => ({
         id: task.id,
         label: task.label,
@@ -224,7 +223,7 @@ export async function runStartupWarmup(onUpdate: StartupWarmupUpdate = () => {})
             tasks[index].status = 'done';
             tasks[index].message = message;
         } catch (error) {
-            if (definition.critical || criticalTaskIds.has(definition.id)) {
+            if (definition.critical) {
                 throw error;
             }
             tasks[index].status = 'degraded';
@@ -237,9 +236,6 @@ export async function runStartupWarmup(onUpdate: StartupWarmupUpdate = () => {})
     const timed = await withTimeout(work, MAX_STARTUP_WAIT_MS);
     const timedOut = timed === 'timeout';
     if (timedOut) {
-        if (tasks.some((task) => task.id === 'neteaseAvailability' && (task.status === 'pending' || task.status === 'running'))) {
-            throw new Error('Startup critical task timed out: neteaseAvailability');
-        }
         tasks.forEach((task) => {
             if (task.status === 'pending' || task.status === 'running') {
                 task.status = 'degraded';

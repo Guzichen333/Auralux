@@ -356,14 +356,21 @@ export class WindowManager {
         this.desktopLyricsWindow.setHasShadow(false);
         this.desktopLyricsWindow.setIgnoreMouseEvents(true, {forward: true});
 
+        let didShowDesktopLyrics = false;
+        this.desktopLyricsWindow.once('ready-to-show', () => {
+            if (this.desktopLyricsWindow && !this.desktopLyricsWindow.isDestroyed()) {
+                this.desktopLyricsWindow.show();
+                didShowDesktopLyrics = true;
+            }
+        });
+
         // 加载桌面歌词页面
         const lyricsHtmlPath = path.join(__dirname, '../../../src/renderer/public/DesktopLyrics.html');
         await this.desktopLyricsWindow.loadFile(lyricsHtmlPath);
 
-        // 页面加载完成后显示
-        this.desktopLyricsWindow.once('ready-to-show', () => {
-            this.desktopLyricsWindow?.show();
-        });
+        if (!didShowDesktopLyrics && this.desktopLyricsWindow && !this.desktopLyricsWindow.isDestroyed()) {
+            this.desktopLyricsWindow.show();
+        }
 
         // 监听窗口移动，保存位置
         let moveTimeout: NodeJS.Timeout | null = null;

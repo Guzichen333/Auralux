@@ -47,6 +47,7 @@ export interface NetEasePlaylist {
     description: string;
     cover: string;
     trackCount: number;
+    playCount?: number;
     tracks: NetEaseSong[];
 }
 

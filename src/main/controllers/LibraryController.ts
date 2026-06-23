@@ -191,8 +191,14 @@ export class LibraryController extends BaseController {
     // ── 查询 ──────────────────────────────────────────────
 
     @IpcHandle('library:getTracks')
-    async getTracks(): Promise<any[]> {
-        return this.libraryCacheManager.getAllTracks();
+    async getTracks(options: any = {}): Promise<any[]> {
+        let tracks = this.libraryCacheManager.getAllTracks();
+        if (options?.favorite === true) {
+            tracks = tracks.filter((track: any) => Boolean(track.favorite || track.liked));
+        } else if (options?.favorite === false) {
+            tracks = tracks.filter((track: any) => !track.favorite && !track.liked);
+        }
+        return tracks;
     }
 
     @IpcHandle('library:search')
@@ -807,9 +813,29 @@ export class LibraryController extends BaseController {
         } else if (data && typeof data === 'object' && data.filePath) {
             // 新的调用方式：传入包含 filePath 的对象
             const { filePath, ...metadata } = data;
+            const metadataKeys = Object.keys(metadata);
+            const favoriteKeys = ['favorite', 'liked'];
+            if (metadataKeys.length > 0 && metadataKeys.every((key) => favoriteKeys.includes(key))) {
+                const favoriteValue = metadata.favorite ?? metadata.liked;
+                return this.updateTrackFavoriteInCache(filePath, Boolean(favoriteValue));
+            }
             return this.updateMetadata(filePath, metadata);
         } else {
             return { success: false, error: '无效的参数格式' };
+        }
+    }
+
+    private async updateTrackFavoriteInCache(filePath: string, favorite: boolean): Promise<any> {
+        try {
+            const updated = this.libraryCacheManager.updateTrackInCache(filePath, {favorite, liked: favorite} as any);
+            if (!updated) {
+                return {success: false, error: '歌曲不存在'};
+            }
+            await this.libraryCacheManager.saveCache();
+            const updatedMetadata = this.libraryCacheManager.getAllTracks().find((track: any) => track.filePath === filePath);
+            return {success: true, updatedMetadata: updatedMetadata || {filePath, favorite, liked: favorite}};
+        } catch (error: any) {
+            return {success: false, error: error.message};
         }
     }
 

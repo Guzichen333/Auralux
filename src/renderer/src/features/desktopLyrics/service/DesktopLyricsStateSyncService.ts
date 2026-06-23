@@ -4,6 +4,8 @@ import type {LyricLine} from '@api/types/lyrics';
 import type {DesktopLyricsPlaybackState} from '@api/types/playback';
 import type {Track} from '@api/types/track';
 
+const DESKTOP_LYRICS_EMPTY_TEXT = '暂无歌词';
+
 export type DesktopLyricsSyncType = 'track' | 'playbackState' | 'position' | 'lyrics';
 
 export interface CurrentDesktopLyricsState {
@@ -105,6 +107,6 @@ export class DesktopLyricsStateSyncService {
     }
 
     private async syncNoLyrics(): Promise<void> {
-        await desktopLyricsGateway.updateLyrics('暂无歌词');
+        await desktopLyricsGateway.updateLyrics(DESKTOP_LYRICS_EMPTY_TEXT);
     }
 }

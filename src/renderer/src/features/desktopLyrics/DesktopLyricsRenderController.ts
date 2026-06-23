@@ -7,6 +7,7 @@ import {
 import type {DesktopLyricLine, DesktopLyricsElements} from './DesktopLyricsTypes';
 
 export class DesktopLyricsRenderController {
+    private readonly emptyLyricsText = '暂无歌词';
     private lyrics: DesktopLyricLine[] = [];
     private currentLyricIndex = -1;
     private readonly wordHighlightController = new LyricsWordHighlightController();
@@ -17,7 +18,7 @@ export class DesktopLyricsRenderController {
     }
 
     showDefaultLyrics(): void {
-        this.elements.currentLyricEl.textContent = '暂无歌词';
+        this.elements.currentLyricEl.textContent = this.emptyLyricsText;
         this.elements.nextLyricEl.textContent = '';
     }
 

@@ -188,31 +188,34 @@ export class ExtensionInstaller {
         });
     }
 
-    scanUserExtensions(): Partial<ExtensionManifest>[] {
+    async scanUserExtensions(): Promise<Partial<ExtensionManifest>[]> {
         const extensions: Partial<ExtensionManifest>[] = [];
-        if (!fs.existsSync(this.extensionsDir)) return extensions;
+        try {
+            await fs.promises.access(this.extensionsDir);
+        } catch {
+            return extensions;
+        }
 
         const builtinExtensionIds = this._getBuiltinExtensionIds();
-        const entries = fs.readdirSync(this.extensionsDir, {withFileTypes: true});
+        const entries = await fs.promises.readdir(this.extensionsDir, {withFileTypes: true});
         for (const entry of entries) {
             if (!entry.isDirectory()) continue;
             const manifestPath = path.join(this.extensionsDir, entry.name, 'manifest.json');
-            if (fs.existsSync(manifestPath)) {
-                try {
-                    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-                    if (builtinExtensionIds.has(manifest.id)) {
-                        continue;
-                    }
+            try {
+                const manifest = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8'));
+                if (builtinExtensionIds.has(manifest.id)) {
+                    continue;
+                }
 
-                    extensions.push({
-                        ...manifest,
-                        installPath: path.join(this.extensionsDir, entry.name),
-                        isBuiltin: false
-                    } as any);
-                } catch (error) {
+                extensions.push({
+                    ...manifest,
+                    installPath: path.join(this.extensionsDir, entry.name),
+                    isBuiltin: false
+                } as any);
+            } catch (error: any) {
+                if (error?.code === 'ENOENT') continue;
                     console.error(`❌ ExtensionInstaller: 读取扩展清单失败 ${entry.name}:`, error);
                 }
-            }
         }
         return extensions;
     }

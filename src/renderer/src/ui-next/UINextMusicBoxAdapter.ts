@@ -3,11 +3,13 @@ import {unifiedSearchService} from '@/features/library/service/UnifiedSearchServ
 import {libraryController} from '@/features/library/LibraryController';
 import {libraryDataService} from '@/features/library/service/LibraryDataService';
 import {playbackController} from '@/features/playback/PlaybackController';
+import {PLAYBACK_QUEUE_CACHE_KEY, PLAYBACK_STATE_CACHE_KEY} from '@/features/playback/service/PlaybackPersistence';
 import {recentPlaybackHistoryService} from '@/features/playback/service/RecentPlaybackHistoryService';
-import {netEaseApiClient, netEaseAuthService, netEaseLocalMatchService, netEaseMigrationReportService, netEaseSyncStateService} from '@/features/netease/service';
+import {netEaseApiClient, netEaseAuthService, netEaseLocalMatchService, netEaseMigrationReportService, netEaseRecommendationService, netEaseSyncStateService} from '@/features/netease/service';
 import type {NetEaseLocalMatch, NetEaseLocalMatchStatus} from '@/features/netease/service';
 import type {NetEaseMigrationReport} from '@/features/netease/service/NetEaseMigrationReportService';
 import type {NetEasePlaylistSyncState} from '@/features/netease/service/NetEaseSyncStateService';
+import type {NetEasePlaylist} from '@/features/netease/types';
 import {appFileImportActionService, appModalService, trayShellService, updateService} from '@/features/appShell/service';
 import {desktopLyricsService} from '@/features/desktopLyrics/service';
 import {lyricsContentService} from '@/features/mediaAssets/service/LyricsContentService';
@@ -33,7 +35,7 @@ import type {CreatePlaylistDialog} from '@ui/dialogs/CreatePlaylistDialog';
 import type {PlaybackStoreChange} from '@/features/playback/PlaybackStore';
 import type {MusicBoxSettings} from '@api/types/settings';
 import type {LyricLine} from '@api/types/lyrics';
-import type {PlayMode} from '@api/types/playback';
+import type {PlaybackStateSnapshot, PlayMode} from '@api/types/playback';
 
 type UINextSource = 'local' | 'netease';
 type UINextSearchFilter = 'all' | 'songs' | 'artists' | 'albums' | 'playlists';
@@ -99,12 +101,26 @@ interface UINextTrack {
     originalTrack: Track;
 }
 
+interface UINextPlaybackQueueMemory {
+    playlist?: Track[];
+    currentIndex?: number;
+    playMode?: PlayMode;
+}
+
+interface UINextPlaybackMemoryCandidate {
+    playlist: Track[];
+    currentIndex: number;
+    position: number;
+    playMode?: PlayMode;
+}
+
 interface UINextPlaylist {
     id: string;
     name: string;
     description?: string;
     cover?: string;
     trackCount: number;
+    playCount?: number;
     source: UINextSource;
     externalId?: string;
     externalType?: string;
@@ -137,6 +153,7 @@ interface UINextMigrationDashboardState {
         duplicates: number;
         lastActivityText: string;
     };
+    habitSummary: UINextMigrationHabitSummary;
     syncSummary: {
         total: number;
         success: number;
@@ -148,6 +165,22 @@ interface UINextMigrationDashboardState {
     reports: Array<NetEaseMigrationReport & {createdAtText: string; statusLabel: string; kindLabel: string}>;
     expandedReportIds: string[];
     diagnostics: UINextMigrationDiagnosticsState;
+}
+
+interface UINextMigrationHabitSummary {
+    likedPlaylistCount: number;
+    createdPlaylistCount: number;
+    favoritePlaylistCount: number;
+    recentPlaybackCount: number;
+    migratedTrackCount: number;
+    failureCount: number;
+    retryableCount: number;
+    confidenceLabel: string;
+    actions: Array<{
+        label: string;
+        detail: string;
+        tone: 'success' | 'warning' | 'danger' | 'info';
+    }>;
 }
 
 interface UINextMigrationDiagnosticsState {
@@ -175,6 +208,23 @@ interface UINextNetEaseAccountCenterState {
     migratedTrackCount: number;
     failureCount: number;
     retryableCount: number;
+}
+
+interface UINextDailyMusicDesktopState {
+    continueTrack: UINextTrack | null;
+    dailyRecommendations: UINextTrack[];
+    recentlyObsessed: UINextTrack[];
+    offlineReady: UINextTrack[];
+    syncSummary: {
+        statusText: string;
+        detailText: string;
+        actionText: string;
+        warningCount: number;
+    };
+    insights: Array<{
+        label: string;
+        value: string;
+    }>;
 }
 
 type UINextSettingsKey =
@@ -284,12 +334,22 @@ interface UINextShellState {
     offlineFilter?: boolean;
     view: string;
     syncing: boolean;
+    playlistOpenState?: {
+        playlistId: string;
+        status: 'idle' | 'loading' | 'ready' | 'error';
+        message: string;
+    };
     queueOpen?: boolean;
     viewTracks?: UINextTrack[];
     homeRecent?: UINextTrack[];
     homeRecommended?: UINextPlaylist[];
     homeNetEase?: UINextPlaylist[];
     homeFavorites?: UINextTrack[];
+    homeDailyDesktop?: UINextDailyMusicDesktopState;
+    songDetailDrawer?: {
+        open: boolean;
+        track: UINextTrack | null;
+    };
     settings?: UINextSettingsState;
     immersiveLyrics?: LyricLine[];
     immersiveLyricsLoading?: boolean;
@@ -331,6 +391,13 @@ interface UINextShell {
     _updateImmersiveProgressOnly?(): void;
     _resetImmersiveVisualizerState?(): void;
     _updateVolumeOnly?(): void;
+    _applyLiked?(trackId: string, liked: boolean): void;
+    renderTrackLikeState?(trackId: string, liked: boolean): boolean;
+    setPlaylistOpenState?(next: {
+        playlistId: string;
+        status: 'idle' | 'loading' | 'ready' | 'error';
+        message: string;
+    }): void;
     confirm?(options: {
         title: string;
         message: string;
@@ -370,7 +437,19 @@ export class UINextMusicBoxAdapter {
     private librarySnapshotPromise: Promise<void> | null = null;
     private librarySnapshotReconcileTimer = 0;
     private netEaseAssetMigrationInFlight = false;
+    private neteaseRecommendationRefreshPromise: Promise<void> | null = null;
+    private neteaseRecommendedSongs: UINextTrack[] = [];
+    private neteaseRecommendedPlaylists: NetEasePlaylist[] = [];
+    private searchDebounceTimer = 0;
+    private readonly searchDebounceMs = 180;
+    private playbackStateUnsubscribe: (() => void) | null = null;
+    private libraryUpdatedUnsubscribe: (() => void) | null = null;
+    private netEaseApiReadyUnsubscribe: (() => void) | null = null;
+    private netEaseApiUnavailableUnsubscribe: (() => void) | null = null;
     private trayActionUnsubscribe: (() => void) | null = null;
+    private readonly handleNetEaseLoginStatusChanged = (): void => {
+        void this.syncNetEaseStatus(0, {force: true});
+    };
 
     constructor(shell: UINextShell) {
         this.shell = shell;
@@ -379,13 +458,14 @@ export class UINextMusicBoxAdapter {
         });
         this.loadSettingsSnapshot();
         this.syncPlaybackState();
+        void this.restorePlaybackMemory();
         void trayShellService.initSystemTray();
         this.bindTrayActions();
         void this.syncTrayPlaybackState();
         this.loadLibrarySnapshot();
         this.syncNetEaseStatus(0, {force: true});
 
-        playbackController.subscribe((_state, change) => {
+        this.playbackStateUnsubscribe = playbackController.subscribe((_state, change) => {
             if (this.applyLightweightPlaybackUpdate(change)) {
                 return;
             }
@@ -400,21 +480,19 @@ export class UINextMusicBoxAdapter {
             this.shell.render();
         });
 
-        libraryController.onLibraryUpdated(() => {
+        this.libraryUpdatedUnsubscribe = libraryController.onLibraryUpdated(() => {
             void this.requestLibrarySnapshotRefresh();
         });
 
-        window.electronAPI?.netease?.onApiReady((data) => {
+        this.netEaseApiReadyUnsubscribe = window.electronAPI?.netease?.onApiReady((data) => {
             netEaseApiClient.setApiEndpoint(data.endpoint);
             void this.syncNetEaseStatus(0, {force: true});
-        });
-        window.electronAPI?.netease?.onApiUnavailable((data) => {
+        }) || null;
+        this.netEaseApiUnavailableUnsubscribe = window.electronAPI?.netease?.onApiUnavailable((data) => {
             netEaseApiClient.setApiEndpoint(data.endpoint);
             this.handleNetEaseApiUnavailable();
-        });
-        window.addEventListener('netease-login-status-changed', () => {
-            void this.syncNetEaseStatus(0, {force: true});
-        });
+        }) || null;
+        window.addEventListener('netease-login-status-changed', this.handleNetEaseLoginStatusChanged);
 
         window.__mbImmersiveBackgroundError = () => {
             if (!this.immersiveBackgroundErrorShown) {
@@ -466,13 +544,41 @@ export class UINextMusicBoxAdapter {
     }
 
     dispose(): void {
+        this.playbackStateUnsubscribe?.();
+        this.playbackStateUnsubscribe = null;
+        this.libraryUpdatedUnsubscribe?.();
+        this.libraryUpdatedUnsubscribe = null;
+        this.netEaseApiReadyUnsubscribe?.();
+        this.netEaseApiReadyUnsubscribe = null;
+        this.netEaseApiUnavailableUnsubscribe?.();
+        this.netEaseApiUnavailableUnsubscribe = null;
         this.trayActionUnsubscribe?.();
         this.trayActionUnsubscribe = null;
+        window.removeEventListener('netease-login-status-changed', this.handleNetEaseLoginStatusChanged);
+        if (this.netEaseUnavailableRecoveryTimer) {
+            window.clearTimeout(this.netEaseUnavailableRecoveryTimer);
+            this.netEaseUnavailableRecoveryTimer = 0;
+        }
+        if (this.librarySnapshotReconcileTimer) {
+            window.clearTimeout(this.librarySnapshotReconcileTimer);
+            this.librarySnapshotReconcileTimer = 0;
+        }
+        if (this.searchDebounceTimer) {
+            window.clearTimeout(this.searchDebounceTimer);
+            this.searchDebounceTimer = 0;
+        }
+        if (window.__mbImmersiveBackgroundError) {
+            delete window.__mbImmersiveBackgroundError;
+        }
     }
 
     search(query: string): void {
         const trimmed = query.trim();
         const session = ++this.searchSession;
+        if (this.searchDebounceTimer) {
+            window.clearTimeout(this.searchDebounceTimer);
+            this.searchDebounceTimer = 0;
+        }
 
         if (!trimmed) {
             this.shell.state.searchResults = {local: [], netease: [], entities: {artists: [], albums: [], playlists: []}};
@@ -482,6 +588,13 @@ export class UINextMusicBoxAdapter {
             return;
         }
 
+        this.searchDebounceTimer = window.setTimeout(() => {
+            this.searchDebounceTimer = 0;
+            this.runSearch(trimmed, session);
+        }, this.searchDebounceMs);
+    }
+
+    private runSearch(trimmed: string, session: number): void {
         void unifiedSearchService.search(trimmed).then((results) => {
             if (session !== this.searchSession) {
                 return;
@@ -649,6 +762,18 @@ export class UINextMusicBoxAdapter {
                 console.error('[ui-next] addToQueue failed', error);
                 showToast('添加到播放队列失败', 'error', 2200);
             });
+    }
+
+    openSongDetail(track: UINextTrack): void {
+        if (!track) {
+            return;
+        }
+        const liveTrack = this.shell.mock.byId?.(track.id) || track;
+        this.shell.state.songDetailDrawer = {
+            open: true,
+            track: liveTrack
+        };
+        this.shell.render();
     }
 
     togglePlayMode(): void {
@@ -1560,7 +1685,7 @@ export class UINextMusicBoxAdapter {
             this.shell.state.view = 'favorites';
             this.shell.state.activePlaylistId = null;
             const tracks = await libraryDataService.getFavoriteTracks();
-            this.shell.state.viewTracks = this.filterLibraryVisibleTracks(tracks)
+            this.shell.state.viewTracks = this.filterFavoriteVisibleTracks(tracks)
                 .map((track) => this.toUINextTrack(track, this.resolveSource(track)));
             this.shell.render();
         } catch (error) {
@@ -1607,13 +1732,25 @@ export class UINextMusicBoxAdapter {
         void windowGateway.close();
     }
 
-    openPlaylist(playlistId: string, _fromHistory = false): void {
+    async openPlaylist(playlistId: string, _fromHistory = false): Promise<void> {
+        if (playlistId.startsWith('netease-recommend-')) {
+            await this.openNetEaseRecommendedPlaylist(playlistId);
+            return;
+        }
+
+        const playlist = this.shell.mock.playlistById?.(playlistId) || null;
+        const externalId = Number(playlist?.externalId || 0);
+        if (playlist?.source === 'netease' && Number.isFinite(externalId) && externalId > 0) {
+            await this.openCloudNetEasePlaylist(playlist, externalId);
+            return;
+        }
+
         this.shell.state.view = 'playlist';
         this.shell.state.activePlaylistId = playlistId;
         this.shell.state.syncing = true;
         this.shell.render();
 
-        void libraryController.getPlaylistDetail(playlistId).then((result) => {
+        await libraryController.getPlaylistDetail(playlistId).then((result) => {
             if (!result.success || !result.playlist) {
                 return;
             }
@@ -1663,6 +1800,120 @@ export class UINextMusicBoxAdapter {
             this.shell.state.syncing = false;
             this.shell.render();
         });
+    }
+
+    private async openCloudNetEasePlaylist(playlist: UINextPlaylist, externalId: number): Promise<void> {
+        const playlistId = playlist.id;
+        this.ensureRuntimePlaylist(playlist);
+        this.shell.state.view = 'playlist';
+        this.shell.state.activePlaylistId = playlistId;
+        this.shell.state.syncing = true;
+        this.shell.setPlaylistOpenState?.({
+            playlistId,
+            status: 'loading',
+            message: '\u6b63\u5728\u4ece\u7f51\u6613\u4e91\u52a0\u8f7d\u6b4c\u5355\u66f2\u76ee\uff0c\u4e0d\u4f1a\u81ea\u52a8\u5bfc\u5165\u672c\u5730\u3002'
+        });
+        this.shell.render();
+
+        try {
+            const tracks = await netEaseRecommendationService.getPlaylistTracks(externalId);
+            const uiTracks = tracks.map((track) => this.toUINextTrack(track, this.resolveSource(track)));
+            this.applyRemotePlaylistTracks(playlistId, uiTracks);
+
+            const existingIndex = this.shell.mock.playlists.findIndex((item) => item.id === playlistId);
+            const nextPlaylist: UINextPlaylist = {
+                ...playlist,
+                trackCount: playlist.trackCount || uiTracks.length,
+                trackIds: uiTracks.map((track) => track.id)
+            };
+            this.ensureRuntimePlaylist(nextPlaylist, existingIndex);
+            this.shell.setPlaylistOpenState?.({
+                playlistId,
+                status: 'ready',
+                message: ''
+            });
+        } catch (error) {
+            console.warn('[ui-next] openCloudNetEasePlaylist failed', error);
+            this.shell.setPlaylistOpenState?.({
+                playlistId,
+                status: 'error',
+                message: '\u7f51\u6613\u4e91\u6b4c\u5355\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5 API \u6216\u7f51\u7edc\u540e\u91cd\u8bd5\u3002'
+            });
+            showToast('网易云歌单加载失败', 'error', 2400);
+        } finally {
+            this.shell.state.syncing = false;
+            this.shell.render();
+        }
+    }
+
+    private async openNetEaseRecommendedPlaylist(playlistId: string): Promise<void> {
+        const playlist = this.shell.mock.playlistById?.(playlistId)
+            || this.shell.state.homeNetEase?.find((item) => item.id === playlistId)
+            || null;
+        const externalId = Number(playlist?.externalId || playlistId.replace('netease-recommend-', ''));
+        if (!playlist || !Number.isFinite(externalId) || externalId <= 0) {
+            return;
+        }
+
+        this.ensureRuntimePlaylist(playlist);
+        this.shell.state.view = 'playlist';
+        this.shell.state.activePlaylistId = playlistId;
+        this.shell.state.syncing = true;
+        this.shell.setPlaylistOpenState?.({
+            playlistId,
+            status: 'loading',
+            message: '\u6b63\u5728\u4ece\u7f51\u6613\u4e91\u52a0\u8f7d\u63a8\u8350\u6b4c\u5355\uff0c\u53ea\u4f5c\u4e3a\u8fdc\u7a0b\u64ad\u653e\u4e0d\u4f1a\u5bfc\u5165\u672c\u5730\u3002'
+        });
+        this.shell.render();
+
+        try {
+            const tracks = await netEaseRecommendationService.getPlaylistTracks(externalId);
+            const uiTracks = tracks.map((track) => this.toUINextTrack(track, this.resolveSource(track)));
+            this.applyRemotePlaylistTracks(playlistId, uiTracks);
+            const existingIndex = this.shell.mock.playlists.findIndex((item) => item.id === playlistId);
+            const nextPlaylist = {
+                ...playlist,
+                trackCount: playlist.trackCount || uiTracks.length,
+                trackIds: uiTracks.map((track) => track.id)
+            };
+            this.ensureRuntimePlaylist(nextPlaylist, existingIndex);
+            this.shell.setPlaylistOpenState?.({
+                playlistId,
+                status: 'ready',
+                message: ''
+            });
+        } catch (error) {
+            console.warn('[ui-next] openNetEaseRecommendedPlaylist failed', error);
+            this.shell.setPlaylistOpenState?.({
+                playlistId,
+                status: 'error',
+                message: '\u7f51\u6613\u4e91\u63a8\u8350\u6b4c\u5355\u52a0\u8f7d\u5931\u8d25\uff0c\u53ef\u91cd\u8bd5\u6216\u8fd4\u56de\u9996\u9875\u3002'
+            });
+        } finally {
+            this.shell.state.syncing = false;
+            this.shell.render();
+        }
+    }
+
+    private applyRemotePlaylistTracks(playlistId: string, uiTracks: UINextTrack[]): void {
+        this.playlistTrackCache.set(playlistId, uiTracks);
+        this.shell.mock.tracksForPlaylist = (id: string) => {
+            if (id === playlistId) {
+                return uiTracks;
+            }
+            return this.playlistTrackCache.get(id) || [];
+        };
+    }
+
+    private ensureRuntimePlaylist(playlist: UINextPlaylist, knownIndex?: number): void {
+        const index = typeof knownIndex === 'number' && knownIndex >= 0
+            ? knownIndex
+            : this.shell.mock.playlists.findIndex((item) => item.id === playlist.id);
+        if (index >= 0) {
+            this.shell.mock.playlists[index] = playlist;
+            return;
+        }
+        this.shell.mock.playlists.push(playlist);
     }
 
     importNeteasePlaylist(): void {
@@ -1880,19 +2131,13 @@ export class UINextMusicBoxAdapter {
 
     toggleLike(track: UINextTrack): void {
         const original = this.resolveOriginalTrack(track);
+        const liked = !track.liked;
         void libraryController.updateTrackMetadata({
             filePath: original.filePath,
-            favorite: !track.liked
+            favorite: liked
         }).then(() => {
-            showToast(!track.liked ? '已收藏' : '已取消收藏', 'info');
-            if (this.shell.state.currentTrack?.id === track.id) {
-                this.shell.state.currentTrack = {
-                    ...this.shell.state.currentTrack,
-                    liked: !track.liked
-                };
-                void this.syncTrayPlaybackState();
-            }
-            return this.requestLibrarySnapshotRefresh();
+            showToast(liked ? '已收藏' : '已取消收藏', 'info');
+            this.applyLikedState(track, liked);
         }).catch((error) => {
             console.error('[ui-next] toggleLike failed', error);
             showToast('收藏操作失败', 'error', 2200);
@@ -2039,8 +2284,10 @@ export class UINextMusicBoxAdapter {
                 .map((track) => this.toUINextTrack(track, this.resolveSource(track)));
             this.shell.state.homeRecent = history.slice(0, 6);
             this.shell.state.homeRecommended = this.shell.mock.playlists.filter((playlist) => playlist.source === 'local');
-            this.shell.state.homeNetEase = this.shell.mock.playlists.filter((playlist) => playlist.source === 'netease');
-            this.shell.state.homeFavorites = uiTracks.filter((track) => track.liked);
+            this.shell.state.homeNetEase = this.buildNetEaseRecommendedPlaylists();
+            this.shell.state.homeFavorites = this.filterFavoriteVisibleTracks(tracks)
+                .map((track) => this.toUINextTrack(track, this.resolveSource(track)));
+            this.shell.state.homeDailyDesktop = this.buildDailyMusicDesktop(uiTracks, history, this.shell.state.homeFavorites, this.neteaseRecommendedSongs);
             this.refreshMigrationDashboardState();
             this.refreshNetEaseAccountCenterState();
             if (history.length > 0) {
@@ -2049,6 +2296,7 @@ export class UINextMusicBoxAdapter {
             }
 
             this.shell.render();
+            void this.refreshNetEaseRecommendations();
         } catch (error) {
             console.error('[ui-next] failed to load library snapshot', error);
         }
@@ -2144,9 +2392,73 @@ export class UINextMusicBoxAdapter {
 
     private refreshPlaylistDerivedSurfaces(): void {
         this.shell.state.homeRecommended = this.shell.mock.playlists.filter((playlist) => playlist.source === 'local');
-        this.shell.state.homeNetEase = this.shell.mock.playlists.filter((playlist) => playlist.source === 'netease');
+        this.shell.state.homeNetEase = this.buildNetEaseRecommendedPlaylists();
         this.refreshMigrationDashboardState();
         this.refreshNetEaseAccountCenterState();
+    }
+
+    private async refreshNetEaseRecommendations(): Promise<void> {
+        if (this.neteaseRecommendationRefreshPromise) {
+            return this.neteaseRecommendationRefreshPromise;
+        }
+
+        this.neteaseRecommendationRefreshPromise = (async () => {
+            try {
+                const [dailySongs, recommendedPlaylists] = await Promise.all([
+                    netEaseRecommendationService.getDailySongs(),
+                    netEaseRecommendationService.getRecommendedPlaylists(12)
+                ]);
+
+                this.neteaseRecommendedSongs = dailySongs
+                    .map((track) => this.toUINextTrack(track, this.resolveSource(track)))
+                    .slice(0, 30);
+                this.neteaseRecommendedPlaylists = recommendedPlaylists;
+
+                const history = this.shell.state.homeRecent || [];
+                const favorites = this.shell.state.homeFavorites || [];
+                const libraryTracks = this.shell.mock.tracks || [];
+                this.shell.state.homeNetEase = this.buildNetEaseRecommendedPlaylists();
+                this.shell.state.homeDailyDesktop = this.buildDailyMusicDesktop(
+                    libraryTracks,
+                    history,
+                    favorites,
+                    this.neteaseRecommendedSongs
+                );
+                this.shell.render();
+            } catch (error) {
+                console.warn('[ui-next] refreshNetEaseRecommendations failed', error);
+            }
+        })().finally(() => {
+            this.neteaseRecommendationRefreshPromise = null;
+        });
+
+        return this.neteaseRecommendationRefreshPromise;
+    }
+
+    private buildNetEaseRecommendedPlaylists(): UINextPlaylist[] {
+        const syncedPlaylists = this.shell.mock.playlists.filter((playlist) => playlist.source === 'netease');
+        const apiPlaylists = this.neteaseRecommendedPlaylists.map((playlist) => ({
+            id: `netease-recommend-${playlist.id}`,
+            name: playlist.name,
+            description: playlist.description,
+            cover: playlist.cover,
+            trackCount: playlist.trackCount,
+            playCount: playlist.playCount,
+            source: 'netease' as UINextSource,
+            externalId: String(playlist.id),
+            externalType: 'recommendation',
+            trackIds: []
+        }));
+
+        const seen = new Set<string>();
+        return [...apiPlaylists, ...syncedPlaylists].filter((playlist) => {
+            const key = playlist.externalId || playlist.id;
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
     }
 
     private refreshMigrationDashboardState(): void {
@@ -2238,6 +2550,7 @@ export class UINextMusicBoxAdapter {
                 duplicates: reports.reduce((total, report) => total + (report.duplicates || 0), 0),
                 lastActivityText: this.formatMigrationTime(Math.max(lastReportAt, lastSyncAt))
             },
+            habitSummary: this.buildMigrationHabitSummary(reports, syncStates),
             syncSummary: {
                 total: syncStates.length,
                 success: syncStates.filter((state) => state.status === 'success').length,
@@ -2261,6 +2574,99 @@ export class UINextMusicBoxAdapter {
             expandedReportIds: this.shell.state.migrationDashboard?.expandedReportIds || [],
             diagnostics: this.buildMigrationDiagnosticsState(reports, syncStates)
         };
+    }
+
+    private buildMigrationHabitSummary(
+        reports: NetEaseMigrationReport[],
+        syncStates: NetEasePlaylistSyncState[]
+    ): UINextMigrationHabitSummary {
+        const neteasePlaylists = this.shell.mock.playlists.filter((playlist) => playlist.source === 'netease');
+        const playlistType = (playlist: UINextPlaylist) => String(playlist.externalType || '').toLowerCase();
+        const reportText = (report: NetEaseMigrationReport & {kindLabel?: string}) => [
+            report.playlistName,
+            report.kind,
+            report.kindLabel
+        ].join(' ').toLowerCase();
+        const likedPlaylistCount = neteasePlaylists.filter((playlist) => {
+            const type = playlistType(playlist);
+            return type.includes('liked') || type.includes('favorite-song') || playlist.name.includes('我喜欢');
+        }).length || reports.filter((report) => reportText(report).includes('我喜欢')).length;
+        const createdPlaylistCount = neteasePlaylists.filter((playlist) => playlistType(playlist).includes('created')).length;
+        const favoritePlaylistCount = neteasePlaylists.filter((playlist) => {
+            const type = playlistType(playlist);
+            return type.includes('subscribed') || type.includes('favorite-playlist');
+        }).length;
+        const recentPlaybackCount = neteasePlaylists.filter((playlist) => {
+            const type = playlistType(playlist);
+            return type.includes('recent') || playlist.name.includes('最近播放');
+        }).length || reports.filter((report) => reportText(report).includes('最近播放')).length;
+        const migratedTrackCount = reports.reduce((total, report) => total + (report.added || 0) + (report.existing || 0), 0);
+        const failureCount = reports.reduce((total, report) => total + (report.failed || 0), 0)
+            + syncStates.filter((state) => state.status === 'failed' || state.status === 'conflict').length;
+        const retryableCount = syncStates.filter((state) => state.retryable).length;
+
+        return {
+            likedPlaylistCount,
+            createdPlaylistCount,
+            favoritePlaylistCount,
+            recentPlaybackCount,
+            migratedTrackCount,
+            failureCount,
+            retryableCount,
+            confidenceLabel: migratedTrackCount > 0 || likedPlaylistCount > 0 || recentPlaybackCount > 0
+                ? '已建立网易云听歌画像'
+                : '等待导入网易云习惯',
+            actions: this.buildMigrationHabitActions({
+                likedPlaylistCount,
+                createdPlaylistCount,
+                favoritePlaylistCount,
+                recentPlaybackCount,
+                migratedTrackCount,
+                failureCount,
+                retryableCount
+            })
+        };
+    }
+
+    private buildMigrationHabitActions(summary: {
+        likedPlaylistCount: number;
+        createdPlaylistCount: number;
+        favoritePlaylistCount: number;
+        recentPlaybackCount: number;
+        migratedTrackCount: number;
+        failureCount: number;
+        retryableCount: number;
+    }): UINextMigrationHabitSummary['actions'] {
+        const actions: UINextMigrationHabitSummary['actions'] = [];
+        if (summary.likedPlaylistCount === 0) {
+            actions.push({
+                label: '补全红心偏好',
+                detail: '迁移完成后，今日推荐会更贴近你的网易云习惯。',
+                tone: 'warning'
+            });
+        }
+        if (summary.recentPlaybackCount === 0) {
+            actions.push({
+                label: '导入最近播放',
+                detail: '最近播放会决定继续听和最近沉迷内容。',
+                tone: 'info'
+            });
+        }
+        if (summary.retryableCount > 0 || summary.failureCount > 0) {
+            actions.push({
+                label: '处理失败和重试',
+                detail: `还有 ${summary.retryableCount} 个可重试同步，${summary.failureCount} 个失败风险。`,
+                tone: 'danger'
+            });
+        }
+        if (!actions.length) {
+            actions.push({
+                label: '习惯迁移可用',
+                detail: `已迁移 ${summary.migratedTrackCount} 首线索，可以进入今日音乐桌面。`,
+                tone: 'success'
+            });
+        }
+        return actions.slice(0, 3);
     }
 
     private buildMigrationDiagnosticsState(
@@ -2751,11 +3157,104 @@ export class UINextMusicBoxAdapter {
         })}`;
     }
 
+    private async restorePlaybackMemory(): Promise<void> {
+        try {
+            const settings = this.readSettings();
+            const playbackState = cacheManager.getLocalCache(PLAYBACK_STATE_CACHE_KEY) as PlaybackStateSnapshot | null;
+            const queueMemory = cacheManager.getLocalCache(PLAYBACK_QUEUE_CACHE_KEY) as UINextPlaybackQueueMemory | null;
+            const candidate = this.resolvePlaybackMemoryCandidate(settings, playbackState, queueMemory);
+
+            if (!candidate) {
+                return;
+            }
+
+            if (candidate.playMode) {
+                playbackController.setPlayMode(candidate.playMode);
+            }
+
+            const {playlist, currentIndex, position} = candidate;
+            await playbackController.setPlaylist(playlist, currentIndex);
+
+            const trackToLoad = playlist[currentIndex];
+            if (!trackToLoad) {
+                this.syncPlaybackState();
+                this.shell.render();
+                return;
+            }
+
+            const loaded = await playbackController.loadTrack(trackToLoad.filePath || trackToLoad.path || '');
+            if (loaded && position > 0) {
+                await playbackController.setPosition(position);
+            }
+
+            if (loaded && settings.autoplay) {
+                window.setTimeout(() => {
+                    void playbackController.play();
+                }, 1000);
+            }
+
+            this.syncPlaybackState();
+            void this.syncTrayPlaybackState();
+            this.shell.render();
+        } catch (error) {
+            console.error('[ui-next] restorePlaybackMemory failed', error);
+        }
+    }
+
+    private resolvePlaybackMemoryCandidate(
+        settings: MusicBoxSettings,
+        playbackState: PlaybackStateSnapshot | null,
+        queueMemory: UINextPlaybackQueueMemory | null
+    ): UINextPlaybackMemoryCandidate | null {
+        if (settings.rememberPosition && playbackState) {
+            const statePlaylist = this.normalizePlaybackMemoryPlaylist(playbackState.playlist);
+            const playlist = statePlaylist.length > 0
+                ? statePlaylist
+                : this.normalizePlaybackMemoryPlaylist(playbackState.currentTrack ? [playbackState.currentTrack] : []);
+            const currentIndex = this.normalizePlaybackMemoryIndex(playbackState.currentIndex, playlist);
+
+            if (playlist.length > 0 && currentIndex >= 0) {
+                return {
+                    playlist,
+                    currentIndex,
+                    position: Math.max(0, Number(playbackState.position) || 0),
+                    playMode: playbackState.playMode
+                };
+            }
+        }
+
+        const queuePlaylist = this.normalizePlaybackMemoryPlaylist(queueMemory?.playlist);
+        const queueIndex = this.normalizePlaybackMemoryIndex(queueMemory?.currentIndex, queuePlaylist);
+        if (queuePlaylist.length > 0 && queueIndex >= 0) {
+            return {
+                playlist: queuePlaylist,
+                currentIndex: queueIndex,
+                position: 0,
+                playMode: queueMemory?.playMode
+            };
+        }
+
+        return null;
+    }
+
+    private normalizePlaybackMemoryPlaylist(playlist: Track[] | null | undefined): Track[] {
+        return (playlist || []).filter((track): track is Track => Boolean(track?.filePath || track?.path));
+    }
+
+    private normalizePlaybackMemoryIndex(index: number | null | undefined, playlist: Track[]): number {
+        if (playlist.length === 0) {
+            return -1;
+        }
+
+        return typeof index === 'number' && index >= 0 && index < playlist.length ? index : 0;
+    }
+
     private syncPlaybackState(): void {
         const state = playbackController.getState();
         const queue = state.playlist.map((track) => this.toUINextTrack(track, this.resolveSource(track)));
-        const currentTrack = state.currentTrack
-            ? this.toUINextTrack(state.currentTrack, this.resolveSource(state.currentTrack))
+        const displayTrack = this.resolvePlaybackDisplayTrack(state.currentTrack, state.playlist, state.currentIndex);
+        const currentTrack = displayTrack
+            ? this.toUINextTrack(displayTrack, this.resolveSource(displayTrack))
             : null;
 
         if (state.volume > 0) {
@@ -2774,6 +3273,77 @@ export class UINextMusicBoxAdapter {
             tracks: queue,
             currentIndex: state.currentIndex
         };
+    }
+
+    private resolvePlaybackDisplayTrack(currentTrack: Track, playlist: Track[], currentIndex: number): Track;
+    private resolvePlaybackDisplayTrack(currentTrack: Track | null, playlist: Track[], currentIndex: number): Track | null;
+    private resolvePlaybackDisplayTrack(currentTrack: Track | null, playlist: Track[], currentIndex: number): Track | null {
+        if (!currentTrack) {
+            return null;
+        }
+
+        const queueTrack = this.findPlaybackQueueTrack(currentTrack, playlist, currentIndex);
+        if (!queueTrack) {
+            return currentTrack;
+        }
+
+        if (!this.hasPlaceholderPlaybackText(currentTrack)) {
+            return {
+                ...queueTrack,
+                ...currentTrack,
+                title: currentTrack.title || queueTrack.title,
+                artist: currentTrack.artist || queueTrack.artist,
+                album: currentTrack.album || queueTrack.album,
+                cover: (currentTrack as Track & {cover?: unknown}).cover || (queueTrack as Track & {cover?: unknown}).cover,
+                duration: currentTrack.duration || queueTrack.duration
+            };
+        }
+
+        return {
+            ...currentTrack,
+            ...queueTrack,
+            filePath: currentTrack.filePath || queueTrack.filePath,
+            path: currentTrack.path || queueTrack.path,
+            duration: currentTrack.duration || queueTrack.duration
+        };
+    }
+
+    private findPlaybackQueueTrack(currentTrack: Track, playlist: Track[], currentIndex: number): Track | null {
+        const indexedTrack = currentIndex >= 0 && currentIndex < playlist.length
+            ? playlist[currentIndex]
+            : null;
+        if (indexedTrack && this.isSamePlaybackTrack(currentTrack, indexedTrack)) {
+            return indexedTrack;
+        }
+
+        return playlist.find((track) => this.isSamePlaybackTrack(currentTrack, track)) || indexedTrack || null;
+    }
+
+    private isSamePlaybackTrack(left: Track, right: Track): boolean {
+        const leftPath = left.filePath || left.path || '';
+        const rightPath = right.filePath || right.path || '';
+        if (leftPath && rightPath && leftPath === rightPath) {
+            return true;
+        }
+
+        return Boolean(this.trackId(left) && this.trackId(left) === this.trackId(right));
+    }
+
+    private hasPlaceholderPlaybackText(track: Track): boolean {
+        const title = (track.title || '').trim();
+        const artist = (track.artist || '').trim();
+        const placeholderTexts = new Set([
+            '',
+            '未知歌曲',
+            '未知标题',
+            '未知歌手',
+            '未知艺术家',
+            'unknown',
+            'unknown title',
+            'unknown artist'
+        ]);
+
+        return placeholderTexts.has(title.toLowerCase()) || placeholderTexts.has(artist.toLowerCase());
     }
 
     private async syncTrayPlaybackState(): Promise<void> {
@@ -3134,6 +3704,10 @@ export class UINextMusicBoxAdapter {
         });
     }
 
+    private filterFavoriteVisibleTracks(tracks: Track[]): Track[] {
+        return tracks.filter((track) => Boolean(track.favorite || track.liked));
+    }
+
     private toUINextTrack(track: Track, source: UINextSource): UINextTrack {
         const id = this.trackId(track);
         this.trackMap.set(id, track);
@@ -3161,6 +3735,106 @@ export class UINextMusicBoxAdapter {
             filePath: track.filePath,
             originalTrack: track
         };
+    }
+
+    private buildDailyMusicDesktop(
+        uiTracks: UINextTrack[],
+        history: UINextTrack[],
+        favorites: UINextTrack[],
+        neteaseRecommendedSongs: UINextTrack[] = []
+    ): UINextDailyMusicDesktopState {
+        const fallbackContinueTrack = this.shell.state.currentTrack || uiTracks[0] || null;
+        const dailyRecommendations = this.pickDailyRecommendations(uiTracks, history, favorites, neteaseRecommendedSongs);
+        const recentlyObsessed = this.pickRecentlyObsessed(history, favorites);
+        const offlineReady = this.pickOfflineReady(uiTracks);
+        const syncSummary = this.buildDailySyncSummary();
+
+        return {
+            continueTrack: history[0] || fallbackContinueTrack,
+            dailyRecommendations,
+            recentlyObsessed,
+            offlineReady,
+            syncSummary,
+            insights: [
+                {label: '曲库', value: `${uiTracks.length} 首`},
+                {label: '离线可听', value: `${offlineReady.length} 首`},
+                {label: '网易云', value: this.shell.state.neteaseSyncStatus || '未登录'}
+            ]
+        };
+    }
+
+    private pickDailyRecommendations(
+        uiTracks: UINextTrack[],
+        history: UINextTrack[],
+        favorites: UINextTrack[],
+        neteaseRecommendedSongs: UINextTrack[] = []
+    ): UINextTrack[] {
+        return this.uniqueDailyTracks([
+            ...neteaseRecommendedSongs,
+            ...favorites,
+            ...history.filter((track) => track.source === 'netease'),
+            ...uiTracks.filter((track) => track.source === 'netease'),
+            ...uiTracks.filter((track) => track.liked),
+            ...uiTracks
+        ]).slice(0, 12);
+    }
+
+    private pickRecentlyObsessed(history: UINextTrack[], favorites: UINextTrack[]): UINextTrack[] {
+        const counts = new Map<string, {track: UINextTrack; count: number}>();
+        history.forEach((track) => {
+            const key = track.id || track.filePath;
+            const existing = counts.get(key);
+            counts.set(key, {
+                track,
+                count: (existing?.count || 0) + 1 + (track.liked ? 1 : 0)
+            });
+        });
+
+        const ranked = Array.from(counts.values())
+            .sort((a, b) => b.count - a.count)
+            .map((item) => item.track);
+        return this.uniqueDailyTracks([...ranked, ...favorites]).slice(0, 8);
+    }
+
+    private pickOfflineReady(uiTracks: UINextTrack[]): UINextTrack[] {
+        return this.uniqueDailyTracks([
+            ...uiTracks.filter((track) => track.offlinePlayable && track.liked),
+            ...uiTracks.filter((track) => track.offlinePlayable)
+        ]).slice(0, 12);
+    }
+
+    private buildDailySyncSummary(): UINextDailyMusicDesktopState['syncSummary'] {
+        const dashboard = this.shell.state.migrationDashboard;
+        const sync = dashboard?.syncSummary;
+        const failed = Number(sync?.failed || 0);
+        const conflict = Number(sync?.conflict || 0);
+        const retryable = Number(sync?.retryable || 0);
+        const warningCount = failed + conflict + retryable;
+        const statusText = warningCount > 0
+            ? `有 ${warningCount} 项需要处理`
+            : (this.shell.state.neteaseSyncStatus || '等待同步');
+        const lastActivity = dashboard?.summary?.lastActivityText || this.shell.state.neteaseLastSyncText || '尚未同步';
+
+        return {
+            statusText,
+            detailText: `网易云 ${this.shell.state.neteaseStatus || 'signed-out'} · ${lastActivity}`,
+            actionText: warningCount > 0 ? '查看迁移状态' : '同步状态正常',
+            warningCount
+        };
+    }
+
+    private uniqueDailyTracks(tracks: UINextTrack[]): UINextTrack[] {
+        const seen = new Set<string>();
+        const result: UINextTrack[] = [];
+        tracks.forEach((track) => {
+            const key = track.id || track.filePath;
+            if (!key || seen.has(key)) {
+                return;
+            }
+            seen.add(key);
+            result.push(track);
+        });
+        return result;
     }
 
     private resolveTrackCover(track: Track): string | null {
@@ -3223,6 +3897,49 @@ export class UINextMusicBoxAdapter {
         this.shell.state.homeFavorites = this.shell.state.homeFavorites?.map((track) => this.toUINextTrack(track.originalTrack, this.resolveSource(track.originalTrack)));
         this.playlistTrackCache.clear();
         this.shell.render();
+    }
+
+    private applyLikedState(track: UINextTrack, liked: boolean): void {
+        this.shell._applyLiked?.(track.id, liked);
+
+        const sameTrack = (item: UINextTrack) => item.id === track.id || item.filePath === track.filePath;
+        const apply = (items?: UINextTrack[]) => items?.map((item) => sameTrack(item) ? {...item, liked} : item);
+        const likedTrack = {...track, liked};
+        if (track.originalTrack) {
+            track.originalTrack.favorite = liked;
+            track.originalTrack.liked = liked;
+        }
+
+        this.shell.state.viewTracks = this.shell.state.view === 'favorites' && !liked
+            ? (this.shell.state.viewTracks || []).filter((item) => !sameTrack(item))
+            : apply(this.shell.state.viewTracks);
+        this.shell.state.homeRecent = apply(this.shell.state.homeRecent);
+        this.shell.state.queue.tracks = apply(this.shell.state.queue.tracks) || this.shell.state.queue.tracks;
+        this.shell.mock.tracks = apply(this.shell.mock.tracks) || this.shell.mock.tracks;
+        this.shell.mock.queue.tracks = apply(this.shell.mock.queue.tracks) || this.shell.mock.queue.tracks;
+        this.shell.state.homeFavorites = liked
+            ? this.upsertTrackListItem(this.shell.state.homeFavorites || [], likedTrack, sameTrack)
+            : (this.shell.state.homeFavorites || []).filter((item) => !sameTrack(item));
+
+        if (this.shell.state.currentTrack && sameTrack(this.shell.state.currentTrack)) {
+            this.shell.state.currentTrack = {...this.shell.state.currentTrack, liked};
+            void this.syncTrayPlaybackState();
+        }
+
+        this.playlistTrackCache.forEach((items, playlistId) => {
+            this.playlistTrackCache.set(playlistId, apply(items) || items);
+        });
+        const patched = this.shell.renderTrackLikeState?.(track.id, liked) === true;
+        if (!patched) {
+            this.shell.render();
+        }
+    }
+
+    private upsertTrackListItem(items: UINextTrack[], track: UINextTrack, sameTrack: (item: UINextTrack) => boolean): UINextTrack[] {
+        if (items.some(sameTrack)) {
+            return items.map((item) => sameTrack(item) ? track : item);
+        }
+        return [track, ...items];
     }
 
     private formatLocalMatchLabel(match: NetEaseLocalMatch): string {

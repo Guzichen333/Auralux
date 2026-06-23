@@ -4,6 +4,19 @@ import {netEaseApiClient} from '@/features/netease/service/NetEaseApiClient';
 import {netEaseLyricsService} from '@/features/netease/service/NetEaseLyricsService';
 import type {LoadedWebAudioTrack, TrackMetadata, WebAudioTrack} from './WebAudioTypes';
 
+const NETEASE_STREAM_URL_CACHE_TTL_MS = 5 * 60 * 1000;
+const NETEASE_SONG_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
+
+interface TimedCacheEntry<T> {
+    value: T;
+    expiresAt: number;
+}
+
+const neteaseStreamUrlCache = new Map<number, TimedCacheEntry<string>>();
+const neteaseSongDetailCache = new Map<number, TimedCacheEntry<TrackMetadata>>();
+const neteaseStreamUrlInFlight = new Map<number, Promise<string | null>>();
+const neteaseSongDetailInFlight = new Map<number, Promise<TrackMetadata>>();
+
 function isHttpUrl(path: string): boolean {
     return path.startsWith('http://') || path.startsWith('https://');
 }
@@ -17,7 +30,52 @@ function getNeteaseSongId(path: string): number | null {
     return match ? parseInt(match[1], 10) : null;
 }
 
+function getFreshCacheValue<T>(cache: Map<number, TimedCacheEntry<T>>, songId: number, now = Date.now()): T | null {
+    const cached = cache.get(songId);
+    if (!cached) {
+        return null;
+    }
+    if (cached.expiresAt <= now) {
+        cache.delete(songId);
+        return null;
+    }
+    return cached.value;
+}
+
+function rememberCacheValue<T>(cache: Map<number, TimedCacheEntry<T>>, songId: number, value: T, ttlMs: number, now = Date.now()): void {
+    cache.set(songId, {
+        value,
+        expiresAt: now + ttlMs
+    });
+}
+
 async function fetchNeteaseStreamUrl(songId: number): Promise<string | null> {
+    const now = Date.now();
+    const cached = getFreshCacheValue(neteaseStreamUrlCache, songId, now);
+    if (cached) {
+        return cached;
+    }
+
+    const inFlight = neteaseStreamUrlInFlight.get(songId);
+    if (inFlight) {
+        return await inFlight;
+    }
+
+    const request = fetchNeteaseStreamUrlUncached(songId)
+        .then((streamUrl) => {
+            if (streamUrl) {
+                rememberCacheValue(neteaseStreamUrlCache, songId, streamUrl, NETEASE_STREAM_URL_CACHE_TTL_MS);
+            }
+            return streamUrl;
+        })
+        .finally(() => {
+            neteaseStreamUrlInFlight.delete(songId);
+        });
+    neteaseStreamUrlInFlight.set(songId, request);
+    return await request;
+}
+
+async function fetchNeteaseStreamUrlUncached(songId: number): Promise<string | null> {
     try {
         const data = await netEaseApiClient.get('/song/url/v1', {
             id: songId.toString(),
@@ -59,6 +117,30 @@ async function fetchNeteaseStreamUrl(songId: number): Promise<string | null> {
 }
 
 async function fetchNeteaseSongDetail(songId: number): Promise<TrackMetadata> {
+    const now = Date.now();
+    const cached = getFreshCacheValue(neteaseSongDetailCache, songId, now);
+    if (cached) {
+        return cached;
+    }
+
+    const inFlight = neteaseSongDetailInFlight.get(songId);
+    if (inFlight) {
+        return await inFlight;
+    }
+
+    const request = fetchNeteaseSongDetailUncached(songId)
+        .then((detail) => {
+            rememberCacheValue(neteaseSongDetailCache, songId, detail, NETEASE_SONG_DETAIL_CACHE_TTL_MS);
+            return detail;
+        })
+        .finally(() => {
+            neteaseSongDetailInFlight.delete(songId);
+        });
+    neteaseSongDetailInFlight.set(songId, request);
+    return await request;
+}
+
+async function fetchNeteaseSongDetailUncached(songId: number): Promise<TrackMetadata> {
     try {
         const data = await netEaseApiClient.get('/song/detail', {
             ids: songId.toString()

@@ -89,9 +89,9 @@ export class ExtensionsController extends BaseController {
     }
 
     @IpcHandle('extensions:scanUserExtensions')
-    scanUserExtensions(): { success: boolean; extensions: any[]; error?: string } {
+    async scanUserExtensions(): Promise<{ success: boolean; extensions: any[]; error?: string }> {
         try {
-            return {success: true, extensions: this.extensionInstaller.scanUserExtensions()};
+            return {success: true, extensions: await this.extensionInstaller.scanUserExtensions()};
         } catch (error: any) {
             return {success: false, error: error.message, extensions: []};
         }

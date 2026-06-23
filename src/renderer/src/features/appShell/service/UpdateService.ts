@@ -31,8 +31,34 @@ class UpdateService {
     private readonly releasesUrl = this.githubRepo
         ? `https://github.com/${this.githubRepo}/releases`
         : '';
+    private readonly cacheTtlMs = 60 * 1000;
+    private cachedResult: {result: UpdateCheckResult; expiresAt: number} | null = null;
+    private checkInFlight: Promise<UpdateCheckResult> | null = null;
 
     async checkForUpdates(options: {fallbackCurrentVersion?: boolean} = {}): Promise<UpdateCheckResult> {
+        if (this.cachedResult && this.cachedResult.expiresAt > Date.now()) {
+            return this.cachedResult.result;
+        }
+
+        if (this.checkInFlight) {
+            return await this.checkInFlight;
+        }
+
+        this.checkInFlight = this.checkForUpdatesUncached(options)
+            .then((result) => {
+                this.cachedResult = {
+                    result,
+                    expiresAt: Date.now() + this.cacheTtlMs
+                };
+                return result;
+            })
+            .finally(() => {
+                this.checkInFlight = null;
+            });
+        return await this.checkInFlight;
+    }
+
+    private async checkForUpdatesUncached(options: {fallbackCurrentVersion?: boolean} = {}): Promise<UpdateCheckResult> {
         const currentVersion = options.fallbackCurrentVersion
             ? await this.getCurrentVersionOrEmpty()
             : await this.getCurrentVersion();

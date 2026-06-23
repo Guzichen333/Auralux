@@ -17,7 +17,6 @@ import {
 } from './startupWarmup';
 import '../../ui-next-static/util';
 import '../../ui-next-static/types';
-import '../../ui-next-static/mockData';
 import '../../ui-next-static/icons';
 import '../../ui-next-static/ImmersivePerfProbe';
 import '../../ui-next-static/components/TrackRow';
@@ -41,6 +40,7 @@ declare global {
         NewMusicShell?: new (options: { el: string; mockData?: unknown }) => unknown;
         MusicBoxMock?: unknown;
         __newShell?: {
+            dispose?(): void;
             confirm?(options: {
                 title: string;
                 message: string;
@@ -49,6 +49,7 @@ declare global {
                 danger?: boolean;
             }): Promise<boolean>;
         };
+        __newShellAdapter?: {dispose?(): void};
         __newShellNetEase?: NetEaseCloudMusic;
         __newShellNetworkDiskModal?: NetworkDiskModal;
         __newShellPluginManagerModal?: PluginManagerModal;
@@ -140,11 +141,14 @@ function renderStartupSplash(root: HTMLElement, tasks: StartupWarmupTaskState[] 
     ];
     const doneCount = taskItems.filter((task) => task.status === 'done' || task.status === 'degraded').length;
     const progress = Math.max(8, Math.round((doneCount / Math.max(1, taskItems.length)) * 100));
+    const startupLogoSrc = assetUrl('auralux-logo-mascot.png');
 
     splash.innerHTML = [
         '<div class="mb-startup__inner">',
         '<div class="mb-startup__brand">',
-        '<div class="mb-startup__mark"><img class="mb-startup__logo" src="assets/images/favicon.svg" alt="Auralux"></div>',
+        '<div class="mb-startup__mark"><img class="mb-startup__logo" src="',
+        escapeHtml(startupLogoSrc),
+        '" alt="Auralux"></div>',
         '<div>',
         '<div class="mb-startup__title">Auralux</div>',
         '<div class="mb-startup__subtitle">正在准备你的音乐空间</div>',
@@ -190,8 +194,14 @@ function clearStartupSplash(root: HTMLElement): void {
 
 function waitForStartupExit(startedAt: number, warmup: Promise<unknown>): Promise<void> {
     void MAX_STARTUP_WAIT_MS;
-    void STARTUP_EXIT_GRACE_MS;
-    return Promise.all([warmup, waitForStartupGate(startedAt)]).then(() => undefined);
+    const startupExit = Promise.race([
+        warmup.then(() => undefined),
+        new Promise<void>((resolve) => window.setTimeout(resolve, STARTUP_EXIT_GRACE_MS))
+    ]);
+    warmup.catch((error) => {
+        console.warn('[ui-next] startup warmup continued in degraded mode', error);
+    });
+    return Promise.all([waitForStartupGate(startedAt), startupExit]).then(() => undefined);
 }
 
 function escapeHtml(value: string): string {
@@ -331,11 +341,24 @@ async function waitForNewMusicShell(timeoutMs = STARTUP_SHELL_WAIT_MS): Promise<
 function describeUINextGlobals(): string {
     return [
         `MBUtil=${Boolean((window as {MBUtil?: unknown}).MBUtil)}`,
-        `MusicBoxMock=${Boolean(window.MusicBoxMock)}`,
         `MBSidebar=${Boolean((window as {MBSidebar?: unknown}).MBSidebar)}`,
         `MBTopSearch=${Boolean((window as {MBTopSearch?: unknown}).MBTopSearch)}`,
         `NewMusicShell=${Boolean(window.NewMusicShell)}`
     ].join(', ');
+}
+
+function createEmptyShellData(): unknown {
+    return {
+        tracks: [],
+        playlists: [],
+        queue: {tracks: [], currentIndex: -1},
+        currentTrack: null,
+        emptySearchResults: {local: [], netease: [], entities: {artists: [], albums: [], playlists: []}},
+        neteaseStatus: 'signed-out',
+        byId: () => null,
+        playlistById: () => null,
+        tracksForPlaylist: () => []
+    };
 }
 
 function createNewMusicShellUnavailableError(): Error {
@@ -375,12 +398,17 @@ async function mountUINext(options: {skipStartupWarmup?: boolean} = {}): Promise
     hideLegacyApp();
     const root = ensureRoot();
     renderStartupSplash(root);
+    let startupSplashActive = true;
     const warmup = options.skipStartupWarmup
         ? Promise.resolve()
-        : runStartupWarmup((tasks) => renderStartupSplash(root, tasks));
+        : runStartupWarmup((tasks) => {
+            if (!startupSplashActive) return;
+            renderStartupSplash(root, tasks);
+        });
     const shellReady = await waitForNewMusicShell();
     await waitForStartupExit(startupStartedAt, warmup);
     // Startup splash should never block the app shell indefinitely.
+    startupSplashActive = false;
     removeStartupSplash(root);
     if (!shellReady) {
         throw createNewMusicShellUnavailableError();
@@ -391,15 +419,20 @@ async function mountUINext(options: {skipStartupWarmup?: boolean} = {}): Promise
         throw new Error('NewMusicShell is unavailable after startup guard.');
     }
 
+    window.__newShellAdapter?.dispose?.();
+    window.__newShell?.dispose?.();
+    startupSplashActive = false;
     clearStartupSplash(root);
     const shell = new NewMusicShell({
         el: '#ui-next-root',
-        mockData: window.MusicBoxMock
+        mockData: createEmptyShellData()
     });
 
     const adapter = new UINextMusicBoxAdapter(shell as ConstructorParameters<typeof UINextMusicBoxAdapter>[0]);
     (shell as {adapter?: UINextMusicBoxAdapter}).adapter = adapter;
+    window.__newShellAdapter = adapter;
     window.__newShell = shell as {
+        dispose?(): void;
         confirm?(options: {
             title: string;
             message: string;

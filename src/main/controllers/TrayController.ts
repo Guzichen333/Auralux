@@ -27,6 +27,7 @@ export class TrayController extends BaseController {
     private tray: Tray | null = null;
     private settings: TraySettings = {enabled: true, closeToTray: false, startMinimized: false};
     private playbackState: TrayPlaybackState = {title: '', artist: '', isPlaying: false, liked: false, playMode: 'sequence'};
+    private lastMenuSignature = '';
     private settingsFilePath: string;
 
     constructor(private windowManager: WindowManager) {
@@ -79,6 +80,11 @@ export class TrayController extends BaseController {
 
     private updateTrayMenu(): void {
         if (!this.tray) return;
+        const nextSignature = this.getMenuSignature();
+        if (nextSignature === this.lastMenuSignature) {
+            return;
+        }
+
         const menu = Menu.buildFromTemplate([
             {label: this.getTrayTrackTitle(), enabled: false},
             {type: 'separator'},
@@ -131,7 +137,21 @@ export class TrayController extends BaseController {
                 }
             }
         ]);
+        this.lastMenuSignature = nextSignature;
         this.tray.setContextMenu(menu);
+    }
+
+    private getMenuSignature(): string {
+        return JSON.stringify({
+            settings: this.settings,
+            playback: {
+                title: this.playbackState.title || '',
+                artist: this.playbackState.artist || '',
+                isPlaying: this.playbackState.isPlaying === true,
+                liked: this.playbackState.liked === true,
+                playMode: this.playbackState.playMode || 'sequence'
+            }
+        });
     }
 
     private getTrayTrackTitle(): string {
@@ -186,6 +206,7 @@ export class TrayController extends BaseController {
     private destroyTrayInstance(): void {
         if (this.tray) {
             this.tray.destroy();
+            this.lastMenuSignature = '';
             this.tray = null;
         }
     }

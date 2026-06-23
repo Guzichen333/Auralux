@@ -172,7 +172,15 @@
           if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
           o.onToggleLike(t);
         }
-      }, iconSpan(t.liked ? MBIcons.heartFilled(18) : MBIcons.heart(18)))
+      }, iconSpan(t.liked ? MBIcons.heartFilled(18) : MBIcons.heart(18))),
+      o.onOpenSongDetail ? h('button', {
+        class: 'mb-player__detail',
+        title: '\u6b4c\u66f2\u8be6\u60c5',
+        onclick: function (e) {
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          o.onOpenSongDetail(t);
+        }
+      }, iconSpan(MBIcons.lyrics(18))) : null
     ] : [
       h('button', {
         class: 'mb-player__cover-btn',
