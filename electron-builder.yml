@@ -96,13 +96,8 @@ linux:
       arch:
         - x64
   category: AudioVideo
-  synopsis: "鏈湴闊充箰鎾斁鍣?
-  description: "涓€娆鹃珮棰滃€笺€佹彃浠跺寲鐨勬湰鍦伴煶涔愭挱鏀惧櫒"
-  # 娣诲姞妗岄潰鏂囦欢閰嶇疆
-  desktop:
-    Name: Auralux
-    Comment: 娌夋蹈寮忔闈㈤煶涔愭挱鏀惧櫒
-    Categories: AudioVideo;Audio;Player;Plugin;Pluggable;
+  synopsis: "Immersive desktop music player"
+  description: "Auralux is an immersive desktop music player for local libraries and personal cloud music workflows."
 
 # NSIS Windows 瀹夎绋嬪簭閰嶇疆
 nsis:
