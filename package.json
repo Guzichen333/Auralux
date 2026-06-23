@@ -4,7 +4,8 @@
   "description": "An immersive desktop music player for local libraries and personal cloud music accounts.",
   "main": "dist/main/main.js",
   "author": {
-    "name": "Auralux Contributors"
+    "name": "Auralux Contributors",
+    "email": "Guzichen333@users.noreply.github.com"
   },
   "homepage": "https://github.com/Guzichen333/Auralux#readme",
   "license": "SEE LICENSE IN AURALUX_LICENSE.md",

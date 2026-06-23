@@ -46,7 +46,7 @@ jobs:
         run: npm run build:rs
 
       - name: Build application
-        run: npm run build:win
+        run: npm run build:win -- --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -90,7 +90,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Build application
-        run: npm run build:mac
+        run: npm run build:mac -- --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -137,7 +137,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Build application
-        run: npm run build:linux
+        run: npm run build:linux -- --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
