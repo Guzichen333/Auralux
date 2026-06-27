@@ -214,6 +214,7 @@ export interface ElectronEqualizerPresetsAPI {
 export interface ElectronMediaAPI {
     readAudioFile(filePath: string): Promise<ArrayBuffer>;
     createAudioStreamUrl(filePath: string): Promise<string>;
+    createRemoteAudioStreamUrl(remoteUrl: string): Promise<string>;
     selectImageData(maxSizeBytes: number): Promise<{
         success: boolean;
         canceled?: boolean;

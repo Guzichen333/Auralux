@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     media: {
         readAudioFile: (filePath: string) => ipcRenderer.invoke('file:readAudio', filePath),
         createAudioStreamUrl: (filePath: string) => ipcRenderer.invoke('file:createAudioStreamUrl', filePath),
+        createRemoteAudioStreamUrl: (remoteUrl: string) => ipcRenderer.invoke('file:createRemoteAudioStreamUrl', remoteUrl),
         selectImageData: (maxSizeBytes: number) => ipcRenderer.invoke('media:selectImageData', maxSizeBytes)
     },
 

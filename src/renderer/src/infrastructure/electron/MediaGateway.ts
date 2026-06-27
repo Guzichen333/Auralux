@@ -23,6 +23,10 @@ class MediaGateway extends ElectronNamespaceAdapter<'media'> {
         return this.call('createAudioStreamUrl', filePath);
     }
 
+    createRemoteAudioStreamUrl(remoteUrl: string): Promise<string> {
+        return this.call('createRemoteAudioStreamUrl', remoteUrl);
+    }
+
     selectImageData(maxSizeBytes: number): Promise<SelectedImageDataResult> {
         return this.call('selectImageData', maxSizeBytes);
     }
