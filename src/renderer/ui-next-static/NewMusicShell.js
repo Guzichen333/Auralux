@@ -1441,7 +1441,7 @@
       if (this.root.getAttribute('data-region-tone') !== regionTone) {
         this.root.setAttribute('data-region-tone', regionTone);
       }
-      if (document.body && document.body.dataset.regionTone !== regionTone) {
+      if (document.body && document.body.dataset && document.body.dataset.regionTone !== regionTone) {
         document.body.dataset.regionTone = regionTone;
       }
       return;
@@ -1449,7 +1449,7 @@
     if (this.root.hasAttribute && this.root.hasAttribute('data-region-tone')) {
       this.root.removeAttribute('data-region-tone');
     }
-    if (document.body && document.body.dataset.regionTone) {
+    if (document.body && document.body.dataset && document.body.dataset.regionTone) {
       delete document.body.dataset.regionTone;
     }
   };
