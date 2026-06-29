@@ -28,41 +28,42 @@ type QueueItem = {
 
 class PlaylistCoverManifest {
     private readonly inFlight = new Map<string, Promise<PlaylistCoverManifestEntry | null>>();
+    private readonly objectUrlByResolvedUrl = new Map<string, string>();
     private queue: QueueItem[] = [];
     private activeCount = 0;
 
     resolveCachedPlaylistCover(playlist: UINextPlaylistLike): string | undefined {
         const sourceUrl = this.getSourceUrl(playlist);
         if (!sourceUrl) {
-            return playlist.cover;
+            return this.getRenderableCover(playlist.cover);
         }
 
         const entry = this.getManifest().entries[this.getKey(playlist, sourceUrl)];
         if (!entry || entry.sourceUrl !== sourceUrl || !entry.resolvedUrl) {
-            return playlist.cover;
+            return this.getRenderableCover(playlist.cover);
         }
 
         console.info('[ui-next] playlist cover cache hit', {
             playlistId: playlist.id,
             sourceUrl
         });
-        return entry.resolvedUrl;
+        return this.getRenderableCover(entry.objectUrl || this.objectUrlByResolvedUrl.get(entry.resolvedUrl) || entry.resolvedUrl);
     }
 
     async resolveCachedPlaylistCoverAsync(playlist: UINextPlaylistLike): Promise<string | undefined> {
         const sourceUrl = this.getSourceUrl(playlist);
         if (!sourceUrl) {
-            return playlist.cover;
+            return this.getRenderableCover(playlist.cover);
         }
 
         const entry = this.getManifest().entries[this.getKey(playlist, sourceUrl)];
         if (!entry || entry.sourceUrl !== sourceUrl || !entry.resolvedUrl) {
-            return playlist.cover;
+            return this.getRenderableCover(playlist.cover);
         }
 
         const objectUrl = await this.readCachedObjectUrl(entry.resolvedUrl);
         if (!objectUrl) {
-            return playlist.cover;
+            return this.getRenderableCover(playlist.cover);
         }
 
         entry.objectUrl = objectUrl;
@@ -89,7 +90,10 @@ class PlaylistCoverManifest {
             const entry = this.getManifest().entries[this.getKey(playlist, sourceUrl)];
             if (entry?.sourceUrl === sourceUrl && entry.resolvedUrl) {
                 hits += 1;
-                playlist.cover = entry.resolvedUrl;
+                const cachedCover = this.resolveCachedPlaylistCover(playlist);
+                if (cachedCover) {
+                    playlist.cover = cachedCover;
+                }
                 if (!this.isFreshCoverEntry(entry) && this.isStaleButUsableCoverEntry(entry)) {
                     scheduled += this.refreshPlaylistCoverInBackground(playlist) ? 1 : 0;
                 }
@@ -112,22 +116,29 @@ class PlaylistCoverManifest {
         const manifest = this.getManifest();
         const existing = manifest.entries[key];
         const now = Date.now();
-        if (existing?.sourceUrl === sourceUrl && existing.resolvedUrl && this.isFreshCoverEntry(existing)) {
-            playlist.cover = await this.resolveCachedPlaylistCoverAsync(playlist) || existing.resolvedUrl;
-            return existing;
-        }
-        if (existing?.sourceUrl === sourceUrl && existing.resolvedUrl && this.isStaleButUsableCoverEntry(existing)) {
-            playlist.cover = await this.resolveCachedPlaylistCoverAsync(playlist) || existing.resolvedUrl;
-            void this.refreshPlaylistCoverInBackground(playlist);
-            return existing;
-        }
-        if (existing?.retryAfter && existing.retryAfter > now) {
-            return null;
-        }
-
         const current = this.inFlight.get(key);
         if (current) {
             return current;
+        }
+        if (existing?.sourceUrl === sourceUrl && existing.resolvedUrl && this.isFreshCoverEntry(existing)) {
+            const cachedCover = await this.resolveCachedPlaylistCoverAsync(playlist);
+            if (cachedCover) {
+                playlist.cover = cachedCover;
+                return existing;
+            }
+            return this.enqueueCoverRefresh(playlist, key, sourceUrl);
+        }
+        if (existing?.sourceUrl === sourceUrl && existing.resolvedUrl && this.isStaleButUsableCoverEntry(existing)) {
+            const cachedCover = await this.resolveCachedPlaylistCoverAsync(playlist);
+            if (cachedCover) {
+                playlist.cover = cachedCover;
+                void this.refreshPlaylistCoverInBackground(playlist);
+                return existing;
+            }
+            return this.enqueueCoverRefresh(playlist, key, sourceUrl);
+        }
+        if (existing?.retryAfter && existing.retryAfter > now) {
+            return null;
         }
 
         const task = this.enqueue(async () => {
@@ -143,7 +154,13 @@ class PlaylistCoverManifest {
                 const nextManifest = this.getManifest();
                 nextManifest.entries[key] = nextEntry;
                 this.saveManifest(nextManifest);
-                playlist.cover = resolvedUrl;
+                const objectUrl = await this.readCachedObjectUrl(resolvedUrl, {forceRefresh: true});
+                if (objectUrl) {
+                    nextEntry.objectUrl = objectUrl;
+                    playlist.cover = objectUrl;
+                } else {
+                    playlist.cover = this.getRenderableCover(playlist.cover);
+                }
                 console.info('[ui-next] playlist cover cache stored', {
                     playlistId: playlist.id,
                     sourceUrl
@@ -165,8 +182,20 @@ class PlaylistCoverManifest {
         const sourceUrl = this.getSourceUrl(playlist);
         if (!sourceUrl) return;
         const manifest = this.getManifest();
-        delete manifest.entries[this.getKey(playlist, sourceUrl)];
+        const key = this.getKey(playlist, sourceUrl);
+        const entry = manifest.entries[key];
+        delete manifest.entries[key];
+        if (entry?.resolvedUrl && !this.hasOtherEntryForResolvedUrl(manifest, key, entry.resolvedUrl)) {
+            this.revokeObjectUrl(entry.resolvedUrl);
+        }
         this.saveManifest(manifest);
+    }
+
+    dispose(): void {
+        for (const objectUrl of this.objectUrlByResolvedUrl.values()) {
+            URL.revokeObjectURL(objectUrl);
+        }
+        this.objectUrlByResolvedUrl.clear();
     }
 
     refreshPlaylistCoverInBackground(playlist: UINextPlaylistLike): boolean {
@@ -183,6 +212,21 @@ class PlaylistCoverManifest {
 
         void this.enqueueCoverRefresh(playlist, key, sourceUrl);
         return true;
+    }
+
+    async refreshPlaylistCover(playlist: UINextPlaylistLike): Promise<PlaylistCoverManifestEntry | null> {
+        const sourceUrl = this.getSourceUrl(playlist);
+        if (!sourceUrl) return null;
+        const key = this.getKey(playlist, sourceUrl);
+        if (this.inFlight.has(key)) return this.inFlight.get(key) || null;
+
+        const manifest = this.getManifest();
+        const existing = manifest.entries[key];
+        if (existing?.retryAfter && existing.retryAfter > Date.now()) {
+            return null;
+        }
+
+        return this.enqueueCoverRefresh(playlist, key, sourceUrl);
     }
 
     private isFreshCoverEntry(entry: PlaylistCoverManifestEntry): boolean {
@@ -213,7 +257,13 @@ class PlaylistCoverManifest {
                 const nextManifest = this.getManifest();
                 nextManifest.entries[key] = nextEntry;
                 this.saveManifest(nextManifest);
-                playlist.cover = resolvedUrl;
+                const objectUrl = await this.readCachedObjectUrl(resolvedUrl, {forceRefresh: true});
+                if (objectUrl) {
+                    nextEntry.objectUrl = objectUrl;
+                    playlist.cover = objectUrl;
+                } else {
+                    playlist.cover = this.getRenderableCover(playlist.cover);
+                }
                 return nextEntry;
             } catch (error) {
                 this.recordFailure(key, sourceUrl, error);
@@ -246,9 +296,18 @@ class PlaylistCoverManifest {
         return sourceUrl;
     }
 
-    private async readCachedObjectUrl(sourceUrl: string): Promise<string | null> {
+    private async readCachedObjectUrl(sourceUrl: string, options: {forceRefresh?: boolean} = {}): Promise<string | null> {
         if (!sourceUrl.startsWith('http://') && !sourceUrl.startsWith('https://')) {
             return sourceUrl;
+        }
+        if (!options.forceRefresh) {
+            const existing = this.objectUrlByResolvedUrl.get(sourceUrl);
+            if (existing) {
+                return existing;
+            }
+        }
+        if (options.forceRefresh) {
+            this.revokeObjectUrl(sourceUrl);
         }
         try {
             const cache = await caches.open(PLAYLIST_COVER_CACHE_NAME);
@@ -257,10 +316,37 @@ class PlaylistCoverManifest {
                 return null;
             }
             const blob = await cached.blob();
-            return URL.createObjectURL(blob);
+            return this.rememberObjectUrl(sourceUrl, URL.createObjectURL(blob));
         } catch {
             return null;
         }
+    }
+
+    private rememberObjectUrl(resolvedUrl: string, objectUrl: string): string {
+        const previous = this.objectUrlByResolvedUrl.get(resolvedUrl);
+        if (previous && previous !== objectUrl) {
+            this.revokeObjectUrl(resolvedUrl);
+        }
+        this.objectUrlByResolvedUrl.set(resolvedUrl, objectUrl);
+        return objectUrl;
+    }
+
+    private revokeObjectUrl(resolvedUrl: string): void {
+        const objectUrl = this.objectUrlByResolvedUrl.get(resolvedUrl);
+        if (!objectUrl) return;
+        URL.revokeObjectURL(objectUrl);
+        this.objectUrlByResolvedUrl.delete(resolvedUrl);
+    }
+
+    private getRenderableCover(cover: string | undefined): string | undefined {
+        if (!cover || this.isRemoteUrl(cover)) {
+            return undefined;
+        }
+        return cover;
+    }
+
+    private isRemoteUrl(value: string): boolean {
+        return value.startsWith('http://') || value.startsWith('https://');
     }
 
     private recordFailure(key: string, sourceUrl: string, error: unknown): void {
@@ -307,7 +393,8 @@ class PlaylistCoverManifest {
     }
 
     private getSourceUrl(playlist: UINextPlaylistLike): string {
-        return typeof playlist.cover === 'string' ? playlist.cover.trim() : '';
+        const sourceUrl = playlist.coverSourceUrl || playlist.cover;
+        return typeof sourceUrl === 'string' ? sourceUrl.trim() : '';
     }
 
     private getKey(playlist: UINextPlaylistLike, sourceUrl: string): string {
@@ -332,10 +419,21 @@ class PlaylistCoverManifest {
 
     private saveManifest(manifest: PlaylistCoverManifestData): void {
         try {
-            localStorage.setItem(PLAYLIST_COVER_MANIFEST_KEY, JSON.stringify(manifest));
+            const entries: Record<string, PlaylistCoverManifestEntry> = {};
+            for (const [key, entry] of Object.entries(manifest.entries)) {
+                const {objectUrl, ...persistedEntry} = entry;
+                entries[key] = persistedEntry;
+            }
+            localStorage.setItem(PLAYLIST_COVER_MANIFEST_KEY, JSON.stringify({version: 1, entries}));
         } catch (error) {
             console.warn('[ui-next] playlist cover cache manifest save failed', error);
         }
+    }
+
+    private hasOtherEntryForResolvedUrl(manifest: PlaylistCoverManifestData, removedKey: string, resolvedUrl: string): boolean {
+        return Object.entries(manifest.entries).some(([key, entry]) => (
+            key !== removedKey && entry.resolvedUrl === resolvedUrl
+        ));
     }
 }
 

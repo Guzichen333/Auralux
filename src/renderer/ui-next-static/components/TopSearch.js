@@ -4,6 +4,8 @@
   var h = MBUtil.h;
   var cover = MBUtil.cover;
   var SourceBadge = global.MBSourceBadge;
+  var SEARCH_RESULT_LIMIT = 8;
+  var SEARCH_ENTITY_LIMIT = 6;
 
   function TopSearch(o) {
     var r = o.results || { local: [], netease: [] };
@@ -12,11 +14,21 @@
     var hasQuery = Boolean(o.query && o.query.trim().length > 0);
     var showPanel = o.focused && (hasQuery || (o.history || []).length > 0);
 
-    var box = h('div', { class: 'mb-search__box' + (o.focused ? ' is-focused' : '') }, [
+    var renderedTrackCount = Math.min(SEARCH_RESULT_LIMIT, (filtered.local || []).length) + Math.min(SEARCH_RESULT_LIMIT, (filtered.netease || []).length);
+    var box = h('div', {
+      class: 'mb-search__box' + (o.focused ? ' is-focused' : ''),
+      role: 'search',
+      'aria-expanded': showPanel ? 'true' : 'false',
+      'aria-owns': showPanel ? 'mb-search-panel' : null
+    }, [
       h('span', { class: 'mb-search__ico', html: MBIcons.search(16) }),
       h('input', {
         class: 'mb-search__input',
         type: 'text',
+        role: 'searchbox',
+        'aria-label': '\u641c\u7d22\u672c\u5730\u548c\u7f51\u6613\u4e91',
+        'aria-controls': 'mb-search-panel',
+        'aria-describedby': renderedTrackCount ? 'mb-search-keyboard-help' : null,
         placeholder: '\u641c\u7d22\u672c\u5730\u548c\u7f51\u6613\u4e91',
         value: o.query,
         oninput: function (e) { o.onInput(e.target.value); },
@@ -27,7 +39,7 @@
     ]);
 
     var panel = showPanel
-      ? h('div', { class: 'mb-search-panel' }, buildPanel(o, filtered, flat, hasQuery))
+      ? h('div', { class: 'mb-search-panel', id: 'mb-search-panel', role: 'region', 'aria-label': '\u641c\u7d22\u7ed3\u679c' }, buildPanel(o, filtered, flat, hasQuery))
       : null;
 
     return h('header', { class: 'mb-topbar' }, [
@@ -90,6 +102,16 @@
   function neteaseAccountMenu(o, statusLabel) {
     var accountCenter = o.neteaseAccountCenter || {};
     var migrationRunning = !!o.neteaseAssetMigrationRunning;
+    var migrationCompleted = (accountCenter.migratedTrackCount || 0) > 0;
+    var migrationNeedsAttention = (accountCenter.failureCount || 0) > 0 || (accountCenter.retryableCount || 0) > 0;
+    var migrationPrimaryLabel = migrationNeedsAttention
+      ? '\u5904\u7406\u5931\u8d25\u9879'
+      : (migrationRunning
+        ? '\u67e5\u770b\u8fc1\u79fb\u8fdb\u5ea6'
+        : (migrationCompleted ? '\u67e5\u770b\u8fc1\u79fb\u72b6\u6001' : '\u8fc1\u79fb\u5168\u90e8\u8d44\u4ea7'));
+    var migrationPrimaryHandler = migrationRunning
+      ? o.onShowNetEaseMigrationProgress
+      : (migrationCompleted || migrationNeedsAttention ? o.onOpenMigrationDashboard : o.onMigrateAllNetEaseAssets);
     var name = o.neteaseNickname || (o.neteaseStatus === 'online' ? '\u7f51\u6613\u4e91\u7528\u6237' : '\u672a\u767b\u5f55');
     var syncText = o.neteaseLastSyncText || '\u5c1a\u672a\u540c\u6b65';
     var syncStatus = o.neteaseSyncStatus || '\u672a\u767b\u5f55';
@@ -116,7 +138,7 @@
         h('span', {}, '\u5df2\u8fc1\u79fb ' + (accountCenter.migratedTrackCount || 0))
       ]),
       h('div', { class: 'mb-netease-menu__actions' }, [
-        neteaseMenuAction(migrationRunning ? '\u67e5\u770b\u8fc1\u79fb\u8fdb\u5ea6' : '\u8fc1\u79fb\u5168\u90e8\u8d44\u4ea7', migrationRunning ? o.onShowNetEaseMigrationProgress : o.onMigrateAllNetEaseAssets, 'mb-netease-menu__action--primary' + (migrationRunning ? ' is-running' : '')),
+        neteaseMenuAction(migrationPrimaryLabel, migrationPrimaryHandler, 'mb-netease-menu__action--primary' + (migrationRunning ? ' is-running' : '')),
         neteaseMenuAction(o.neteaseStatus === 'online' ? '\u91cd\u65b0\u767b\u5f55' : '\u767b\u5f55', o.onOpenNetEaseLogin),
         neteaseMenuAction('\u91cd\u8bd5\u540c\u6b65', o.onRetryNetEaseSync),
         neteaseMenuAction('\u8fc1\u79fb\u72b6\u6001', o.onOpenMigrationDashboard),
@@ -176,6 +198,7 @@
       return h('button', {
         class: 'mb-search__filter' + (filter.id === activeFilter ? ' is-active' : ''),
         type: 'button',
+        'aria-pressed': filter.id === activeFilter ? 'true' : 'false',
         onclick: function (event) {
           event.preventDefault();
           event.stopPropagation();
@@ -188,7 +211,7 @@
   function termSection(className, title, terms, onSelect) {
     return h('div', { class: className }, [
       h('div', { class: 'mb-search-term__head' }, title),
-      h('div', { class: 'mb-search-term__list' }, (terms || []).map(function (term) {
+      h('div', { class: 'mb-search-term__list' }, (terms || []).slice(0, SEARCH_RESULT_LIMIT).map(function (term) {
         return h('button', {
           class: 'mb-search-term',
           type: 'button',
@@ -204,7 +227,9 @@
 
   function buildGroups(results, selectedIndex, onSelect, onAddToQueue, onToggleLike, onOpenPlaylist) {
     var runningIndex = 0;
-    var nodes = [];
+    var nodes = renderedSongCount(results) > 0
+      ? [h('div', { class: 'sr-only', id: 'mb-search-keyboard-help' }, '\u4f7f\u7528\u4e0a\u4e0b\u65b9\u5411\u952e\u9009\u62e9\u53ef\u89c1\u6b4c\u66f2\uff0c\u6309 Enter \u64ad\u653e\u9009\u4e2d\u9879')]
+      : [];
 
     function group(title, dotClass, list) {
       if (!list.length) return;
@@ -214,12 +239,24 @@
         h('span', { class: 'numeric' }, String(list.length))
       ]));
 
-      list.forEach(function (t) {
+      var visible = list.slice(0, SEARCH_RESULT_LIMIT);
+      visible.forEach(function (t) {
         var idx = runningIndex++;
         nodes.push(h('div', {
+          id: 'mb-search-option-' + idx,
           class: 'mb-search-result-row' + (idx === selectedIndex ? ' is-selected' : ''),
+          role: 'group',
+          tabindex: '0',
+          'aria-label': '\u64ad\u653e ' + (t.title || ''),
+          'aria-current': idx === selectedIndex ? 'true' : 'false',
           onclick: function () { onSelect(t); },
-          ondblclick: function () { onSelect(t); }
+          ondblclick: function () { onSelect(t); },
+          onkeydown: function (event) {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            event.stopPropagation();
+            onSelect(t);
+          }
         }, [
           cover(t.cover, 'mb-cover--xs'),
           h('div', { class: 'mb-row__titles' }, [
@@ -237,6 +274,9 @@
           })
         ]));
       });
+      if (list.length > visible.length) {
+        nodes.push(h('div', { class: 'mb-search__more', role: 'note' }, '\u8fd8\u6709 ' + (list.length - visible.length) + ' \u6761\uff0c\u8fdb\u5165\u641c\u7d22\u9875\u53ef\u67e5\u770b\u5b8c\u6574\u7ed3\u679c'));
+      }
     }
 
     group('\u672c\u5730\u97f3\u4e50', 'mb-src-dot--local', results.local || []);
@@ -254,11 +294,22 @@
       title,
       h('span', { class: 'numeric' }, String(list.length))
     ]));
-    list.forEach(function (item) {
+    var visible = list.slice(0, SEARCH_ENTITY_LIMIT);
+    visible.forEach(function (item, index) {
       nodes.push(h('div', {
+        id: 'mb-search-entity-' + title + '-' + index,
         class: 'mb-search-entity',
+        role: 'group',
+        tabindex: item.playlistId ? '0' : null,
+        'aria-label': item.playlistId ? '\u6253\u5f00 ' + (item.title || title) : null,
         onclick: function () {
           if (item.playlistId && onOpenPlaylist) onOpenPlaylist(item.playlistId);
+        },
+        onkeydown: function (event) {
+          if (!item.playlistId || (event.key !== 'Enter' && event.key !== ' ')) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (onOpenPlaylist) onOpenPlaylist(item.playlistId);
         }
       }, [
         cover(item.cover, 'mb-cover--xs'),
@@ -270,6 +321,9 @@
         item.playlistId ? openEntityButton(item, onOpenPlaylist) : null
       ]));
     });
+    if (list.length > visible.length) {
+      nodes.push(h('div', { class: 'mb-search__more', role: 'note' }, '\u8fd8\u6709 ' + (list.length - visible.length) + ' \u4e2a' + title));
+    }
   }
 
   function openEntityButton(item, onOpenPlaylist) {
@@ -319,6 +373,10 @@
   function hasEntities(results) {
     var entities = results.entities || {};
     return Boolean((entities.artists || []).length || (entities.albums || []).length || (entities.playlists || []).length);
+  }
+
+  function renderedSongCount(results) {
+    return Math.min(SEARCH_RESULT_LIMIT, (results.local || []).length) + Math.min(SEARCH_RESULT_LIMIT, (results.netease || []).length);
   }
 
   global.MBTopSearch = TopSearch;

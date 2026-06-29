@@ -9194,15 +9194,20 @@ body.ui-next-app #netease-import-modal .btn:disabled,
   --mb-region-sidebar-bg: oklch(14% 0.014 248);
   --mb-region-sidebar-border: oklch(30% 0.018 248);
   --mb-region-main-bg: oklch(96% 0.009 238);
+  --mb-region-main-gradient: radial-gradient(circle at 14% 10%, color-mix(in oklch, var(--mb-coral) 12%, transparent), transparent 34%), radial-gradient(circle at 82% 18%, color-mix(in oklch, var(--mb-cyan) 10%, transparent), transparent 38%), linear-gradient(135deg, var(--mb-bg), color-mix(in oklch, var(--mb-bg-elevated) 88%, var(--mb-coral) 5%));
   --mb-region-main-surface: oklch(99% 0.006 238);
   --mb-region-main-surface-soft: oklch(92% 0.012 238);
   --mb-region-main-border: oklch(77% 0.016 238);
   --mb-region-main-hover: oklch(90% 0.014 238);
   --mb-region-main-active: oklch(84% 0.018 238);
+  --mb-region-main-accent: var(--mb-coral);
   --mb-region-chrome-bg: oklch(28% 0.011 238);
   --mb-region-chrome-surface: oklch(34% 0.013 238);
   --mb-region-chrome-border: oklch(45% 0.014 238);
   --mb-region-chrome-muted: oklch(78% 0.011 238);
+  --mb-region-overlay-surface: color-mix(in oklch, var(--mb-region-main-surface) 76%, var(--mb-region-chrome-bg) 24%);
+  --mb-region-overlay-border: color-mix(in oklch, var(--mb-region-main-border) 72%, var(--mb-region-main-accent) 28%);
+  --mb-region-overlay-shadow: 0 18px 44px color-mix(in oklch, var(--mb-region-main-accent) 16%, transparent);
 }
 
 
@@ -9322,7 +9327,7 @@ body.ui-next-app:has(.ui-next-shell) {
   --mb-region-overlay-shadow: 0 18px 44px color-mix(in oklch, var(--mb-region-main-accent) 16%, transparent);
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone="lilac-sun"]) {
+body.ui-next-app[data-region-tone="lilac-sun"] {
   --mb-region-main-accent: #B18DFF;
   --mb-region-main-surface: color-mix(in oklch, white 70%, #FFBB57 30%);
   --mb-region-main-surface-soft: color-mix(in oklch, #B18DFF 34%, #FFF443 24%);
@@ -9333,7 +9338,7 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone="lilac-sun"]) {
   --mb-region-chrome-border: color-mix(in oklch, #B18DFF 34%, oklch(45% 0.014 272));
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone="candy-violet"]) {
+body.ui-next-app[data-region-tone="candy-violet"] {
   --mb-region-main-accent: #5240FE;
   --mb-region-main-surface: color-mix(in oklch, white 68%, #AD9EFF 32%);
   --mb-region-main-surface-soft: color-mix(in oklch, #FD91FF 32%, #5240FE 20%);
@@ -9344,7 +9349,7 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone="candy-violet"]) {
   --mb-region-chrome-border: color-mix(in oklch, #AD9EFF 34%, oklch(45% 0.014 275));
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone="apricot-sky"]) {
+body.ui-next-app[data-region-tone="apricot-sky"] {
   --mb-region-main-accent: #87BDFF;
   --mb-region-main-surface: color-mix(in oklch, white 70%, #DBEAFF 30%);
   --mb-region-main-surface-soft: color-mix(in oklch, #FFC870 34%, #87BDFF 24%);
@@ -9355,7 +9360,7 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone="apricot-sky"]) {
   --mb-region-chrome-border: color-mix(in oklch, #87BDFF 34%, oklch(45% 0.014 240));
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone="aqua-dream"]) {
+body.ui-next-app[data-region-tone="aqua-dream"] {
   --mb-region-main-accent: #58B8FF;
   --mb-region-main-surface: color-mix(in oklch, white 68%, #74DFFF 32%);
   --mb-region-main-surface-soft: color-mix(in oklch, #58B8FF 30%, #74DFFF 32%);
@@ -9366,7 +9371,7 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone="aqua-dream"]) {
   --mb-region-chrome-border: color-mix(in oklch, #58B8FF 34%, oklch(46% 0.014 235));
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone="lime-mint"]) {
+body.ui-next-app[data-region-tone="lime-mint"] {
   --mb-region-main-accent: #CEF595;
   --mb-region-main-surface: color-mix(in oklch, white 68%, #B1FFEC 32%);
   --mb-region-main-surface-soft: color-mix(in oklch, #CEF595 34%, #B1FFEC 30%);
@@ -9377,7 +9382,7 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone="lime-mint"]) {
   --mb-region-chrome-border: color-mix(in oklch, #B1FFEC 32%, oklch(45% 0.014 205));
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) {
+body.ui-next-app[data-region-tone] {
   --mb-region-overlay-surface: color-mix(in oklch, var(--mb-region-main-surface) 76%, var(--mb-region-chrome-bg) 24%);
   --mb-region-overlay-border: color-mix(in oklch, var(--mb-region-main-border) 72%, var(--mb-region-main-accent) 28%);
   --mb-region-overlay-shadow: 0 18px 44px color-mix(in oklch, var(--mb-region-main-accent) 16%, transparent);
@@ -10123,18 +10128,18 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone]) {
   color: oklch(18% 0.014 238) !important;
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-login-modal,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #add-to-playlist-dialog,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog,
+body.ui-next-app[data-region-tone] #netease-login-modal,
+body.ui-next-app[data-region-tone] #netease-import-modal,
+body.ui-next-app[data-region-tone] #add-to-playlist-dialog,
+body.ui-next-app[data-region-tone] #create-playlist-dialog,
 #netease-import-modal.netease-import-control-modal {
   background: color-mix(in oklch, var(--mb-region-chrome-bg) 56%, transparent);
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-login-modal .modal-dialog,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .modal-dialog,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #add-to-playlist-dialog .modal-dialog,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .modal-dialog,
+body.ui-next-app[data-region-tone] #netease-login-modal .modal-dialog,
+body.ui-next-app[data-region-tone] #netease-import-modal .modal-dialog,
+body.ui-next-app[data-region-tone] #add-to-playlist-dialog .modal-dialog,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .modal-dialog,
 #netease-import-modal.netease-import-control-modal .modal-dialog {
   background:
     radial-gradient(circle at 14% 0%, color-mix(in oklch, var(--mb-region-main-accent) 18%, transparent), transparent 42%),
@@ -10144,24 +10149,24 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .
   box-shadow: var(--mb-region-overlay-shadow);
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-login-modal .modal-header,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .modal-header,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #add-to-playlist-dialog .modal-header,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .modal-header,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .modal-footer,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .modal-footer,
+body.ui-next-app[data-region-tone] #netease-login-modal .modal-header,
+body.ui-next-app[data-region-tone] #netease-import-modal .modal-header,
+body.ui-next-app[data-region-tone] #add-to-playlist-dialog .modal-header,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .modal-header,
+body.ui-next-app[data-region-tone] #netease-import-modal .modal-footer,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .modal-footer,
 #netease-import-modal.netease-import-control-modal .modal-header,
 #netease-import-modal.netease-import-control-modal .modal-footer {
   border-color: var(--mb-region-overlay-border);
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-status,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-tracks,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .form-input,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .form-input,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .form-textarea,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .btn,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .btn,
+body.ui-next-app[data-region-tone] #netease-import-status,
+body.ui-next-app[data-region-tone] #netease-import-tracks,
+body.ui-next-app[data-region-tone] #netease-import-modal .form-input,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .form-input,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .form-textarea,
+body.ui-next-app[data-region-tone] #netease-import-modal .btn,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .btn,
 #netease-import-modal.netease-import-control-modal #netease-import-status,
 #netease-import-modal.netease-import-control-modal #netease-import-tracks,
 #netease-import-modal.netease-import-control-modal .form-input,
@@ -10171,14 +10176,14 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .
   color: var(--mb-text);
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .btn:hover,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .btn:hover,
+body.ui-next-app[data-region-tone] #netease-import-modal .btn:hover,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .btn:hover,
 #netease-import-modal.netease-import-control-modal .btn:hover {
   background: color-mix(in oklch, var(--mb-region-overlay-surface) 68%, var(--mb-region-main-accent) 22%);
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .btn-primary,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .btn-primary,
+body.ui-next-app[data-region-tone] #netease-import-modal .btn-primary,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .btn-primary,
 #netease-import-modal.netease-import-control-modal .btn-primary {
   background: var(--mb-region-main-accent) !important;
   border-color: var(--mb-region-main-accent) !important;
@@ -10253,7 +10258,7 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .
 
 /* Stage 60 theme readability shield */
 .ui-next-shell[data-region-tone],
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) {
+body.ui-next-app[data-region-tone] {
   --mb-readable-paper: oklch(88% 0.012 255);
   --mb-readable-paper-soft: oklch(82% 0.014 255);
   --mb-readable-ink: oklch(21% 0.018 252);
@@ -10300,7 +10305,7 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone]) {
 }
 
 .ui-next-shell[data-region-tone="candy-violet"],
-body.ui-next-app:has(.ui-next-shell[data-region-tone="candy-violet"]) {
+body.ui-next-app[data-region-tone="candy-violet"] {
   --mb-readable-on-accent: oklch(96% 0.006 252);
 }
 
@@ -10541,10 +10546,10 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone="candy-violet"]) {
   color: oklch(17% 0.018 252);
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-login-modal .modal-dialog,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .modal-dialog,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #add-to-playlist-dialog .modal-dialog,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .modal-dialog,
+body.ui-next-app[data-region-tone] #netease-login-modal .modal-dialog,
+body.ui-next-app[data-region-tone] #netease-import-modal .modal-dialog,
+body.ui-next-app[data-region-tone] #add-to-playlist-dialog .modal-dialog,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .modal-dialog,
 #netease-import-modal.netease-import-control-modal .modal-dialog {
   background:
     linear-gradient(135deg, color-mix(in oklch, var(--mb-region-main-accent) 5%, transparent), transparent 42%),
@@ -10553,13 +10558,13 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .
   color: var(--mb-readable-ink);
 }
 
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-status,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-tracks,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .form-input,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .form-input,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .form-textarea,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .btn,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .btn,
+body.ui-next-app[data-region-tone] #netease-import-status,
+body.ui-next-app[data-region-tone] #netease-import-tracks,
+body.ui-next-app[data-region-tone] #netease-import-modal .form-input,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .form-input,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .form-textarea,
+body.ui-next-app[data-region-tone] #netease-import-modal .btn,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .btn,
 #netease-import-modal.netease-import-control-modal #netease-import-status,
 #netease-import-modal.netease-import-control-modal #netease-import-tracks,
 #netease-import-modal.netease-import-control-modal .form-input,
@@ -10573,8 +10578,8 @@ body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .
 .ui-next-shell[data-region-tone] .mb-song-detail__actions .mb-btn--primary,
 .ui-next-shell[data-region-tone] .mb-netease-menu__action--primary,
 .ui-next-shell[data-region-tone] .mb-tracklist__load-more,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #netease-import-modal .btn-primary,
-body.ui-next-app:has(.ui-next-shell[data-region-tone]) #create-playlist-dialog .btn-primary,
+body.ui-next-app[data-region-tone] #netease-import-modal .btn-primary,
+body.ui-next-app[data-region-tone] #create-playlist-dialog .btn-primary,
 #netease-import-modal.netease-import-control-modal .btn-primary {
   color: var(--mb-readable-on-accent) !important;
 }

@@ -4279,7 +4279,20 @@ export class UINextMusicBoxAdapter {
     }
 
     private resolveCoverCacheStatus(track: Track): string {
-        if (track.cover || (track as Track & {coverImagePath?: string}).coverImagePath) return '封面已缓存';
+        const value = track as Track & {cachedCover?: unknown; coverImagePath?: unknown};
+        if (typeof value.cachedCover === 'string' && value.cachedCover.length > 0 && !this.isRemoteCoverUrl(value.cachedCover)) {
+            return '封面已缓存';
+        }
+        if (typeof value.coverImagePath === 'string' && value.coverImagePath.length > 0) {
+            return '封面已缓存';
+        }
+        if (this.resolveTrackCover(track)) {
+            return '封面已缓存';
+        }
+        const coverSourceUrl = this.resolveTrackCoverSource(track);
+        if (coverSourceUrl && this.isRemoteCoverUrl(coverSourceUrl)) {
+            return '封面待缓存';
+        }
         return '封面待缓存';
     }
 

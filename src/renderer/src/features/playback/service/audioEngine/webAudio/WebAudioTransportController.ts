@@ -19,7 +19,26 @@ class WebAudioTransportController {
     private playing: boolean;
     private paused: boolean;
     private pauseTime: number;
+    private attachedMediaElement: HTMLAudioElement | null;
+    private playbackHealthTimer: ReturnType<typeof setInterval> | null;
+    private lastHealthPosition: number;
+    private lastHealthProgressAt: number;
+    private bufferingStartedAt: number;
     private readonly progressTicker: WebAudioProgressTicker;
+    private readonly handleMediaElementError = (): void => {
+        void this.handlePlaybackFault('media-error');
+    };
+    private readonly handleMediaElementBuffering = (): void => {
+        if (!this.playing) {
+            return;
+        }
+        this.bufferingStartedAt = Date.now();
+    };
+    private readonly handleMediaElementRecovered = (): void => {
+        this.bufferingStartedAt = 0;
+        this.lastHealthPosition = this.attachedMediaElement?.currentTime || 0;
+        this.lastHealthProgressAt = Date.now();
+    };
 
     constructor(options: WebAudioTransportOptions) {
         this.options = options;
@@ -27,6 +46,11 @@ class WebAudioTransportController {
         this.playing = false;
         this.paused = false;
         this.pauseTime = 0;
+        this.attachedMediaElement = null;
+        this.playbackHealthTimer = null;
+        this.lastHealthPosition = 0;
+        this.lastHealthProgressAt = 0;
+        this.bufferingStartedAt = 0;
         this.progressTicker = new WebAudioProgressTicker();
     }
 
@@ -38,12 +62,26 @@ class WebAudioTransportController {
             throw new Error('Web Audio transport requires an AudioContext and media element');
         }
 
-        if (!this.sourceNode) {
-            this.sourceNode = audioContext.createMediaElementSource(mediaElement);
-            this.options.connectSourceToChain(this.sourceNode);
+        this.attachMediaElement(mediaElement);
+    }
+
+    attachMediaElement(mediaElement: HTMLAudioElement): void {
+        const audioContext = this.options.getAudioContext();
+        if (!audioContext) {
+            throw new Error('Web Audio transport requires an AudioContext');
         }
 
+        this.releaseSourceNode();
+        this.detachMediaElementHealthListeners();
+        this.sourceNode = audioContext.createMediaElementSource(mediaElement);
+        this.options.connectSourceToChain(this.sourceNode);
         mediaElement.onended = () => this.handleSourceEnded();
+        this.attachMediaElementHealthListeners(mediaElement);
+        this.playing = false;
+        this.paused = false;
+        this.pauseTime = 0;
+        this.stopProgressUpdates();
+        this.stopPlaybackHealthWatchdog();
     }
 
     isPlaying(): boolean {
@@ -84,6 +122,7 @@ class WebAudioTransportController {
             this.paused = false;
             this.pauseTime = mediaElement.currentTime || 0;
             this.startProgressUpdates();
+            this.startPlaybackHealthWatchdog();
             await this.notifyPlaybackStateChanged(true);
 
             return true;
@@ -110,6 +149,7 @@ class WebAudioTransportController {
             this.playing = false;
             this.paused = true;
             this.stopProgressUpdates();
+            this.stopPlaybackHealthWatchdog();
 
             console.log(`⏸️ 暂停播放，位置: ${this.pauseTime.toFixed(2)}s`);
             await this.notifyPlaybackStateChanged(false);
@@ -133,6 +173,7 @@ class WebAudioTransportController {
             this.paused = false;
             this.pauseTime = 0;
             this.stopProgressUpdates();
+            this.stopPlaybackHealthWatchdog();
             void this.notifyPlaybackStateChanged(false);
             void this.notifyPositionChanged(0);
             console.log('⏹️ 停止播放');
@@ -157,6 +198,7 @@ class WebAudioTransportController {
             this.paused = false;
             this.pauseTime = 0;
             this.stopProgressUpdates();
+            this.stopPlaybackHealthWatchdog();
             return true;
         } catch (error) {
             console.warn('⚠️ 清理媒体元素源失败:', error);
@@ -202,8 +244,10 @@ class WebAudioTransportController {
 
     destroy(): void {
         this.clearMediaSource();
+        this.detachMediaElementHealthListeners();
         this.releaseSourceNode();
         this.stopProgressUpdates();
+        this.stopPlaybackHealthWatchdog();
     }
 
     private releaseSourceNode(): void {
@@ -229,8 +273,104 @@ class WebAudioTransportController {
         this.paused = false;
         this.pauseTime = 0;
         this.stopProgressUpdates();
+        this.stopPlaybackHealthWatchdog();
         void this.notifyPlaybackStateChanged(false);
         void this.options.onTrackEnded();
+    }
+
+    private attachMediaElementHealthListeners(mediaElement: HTMLAudioElement): void {
+        this.attachedMediaElement = mediaElement;
+        mediaElement.addEventListener('error', this.handleMediaElementError);
+        mediaElement.addEventListener('stalled', this.handleMediaElementBuffering);
+        mediaElement.addEventListener('waiting', this.handleMediaElementBuffering);
+        mediaElement.addEventListener('playing', this.handleMediaElementRecovered);
+        mediaElement.addEventListener('canplay', this.handleMediaElementRecovered);
+    }
+
+    private detachMediaElementHealthListeners(): void {
+        const mediaElement = this.attachedMediaElement;
+        if (!mediaElement) {
+            return;
+        }
+
+        mediaElement.removeEventListener('error', this.handleMediaElementError);
+        mediaElement.removeEventListener('stalled', this.handleMediaElementBuffering);
+        mediaElement.removeEventListener('waiting', this.handleMediaElementBuffering);
+        mediaElement.removeEventListener('playing', this.handleMediaElementRecovered);
+        mediaElement.removeEventListener('canplay', this.handleMediaElementRecovered);
+        mediaElement.onended = null;
+        this.attachedMediaElement = null;
+    }
+
+    private startPlaybackHealthWatchdog(): void {
+        const mediaElement = this.options.getMediaElement();
+        this.stopPlaybackHealthWatchdog();
+        this.lastHealthPosition = mediaElement?.currentTime || 0;
+        this.lastHealthProgressAt = Date.now();
+        this.bufferingStartedAt = 0;
+        this.playbackHealthTimer = setInterval(() => {
+            void this.checkPlaybackHealth();
+        }, 1000);
+    }
+
+    private stopPlaybackHealthWatchdog(): void {
+        if (this.playbackHealthTimer) {
+            clearInterval(this.playbackHealthTimer);
+            this.playbackHealthTimer = null;
+        }
+        this.bufferingStartedAt = 0;
+    }
+
+    private async checkPlaybackHealth(): Promise<void> {
+        if (!this.playing || this.paused) {
+            return;
+        }
+
+        const mediaElement = this.options.getMediaElement();
+        if (!mediaElement || !mediaElement.src) {
+            await this.handlePlaybackFault('missing-media');
+            return;
+        }
+
+        if (mediaElement.error) {
+            await this.handlePlaybackFault('media-error');
+            return;
+        }
+
+        if (mediaElement.ended) {
+            this.handleSourceEnded();
+            return;
+        }
+
+        const now = Date.now();
+        const currentPosition = mediaElement.currentTime || 0;
+        if (currentPosition > this.lastHealthPosition + 0.05) {
+            this.lastHealthPosition = currentPosition;
+            this.lastHealthProgressAt = now;
+            this.bufferingStartedAt = 0;
+            return;
+        }
+
+        const waitingForData = mediaElement.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || this.bufferingStartedAt > 0;
+        const stuckForMs = now - this.lastHealthProgressAt;
+        if (waitingForData && stuckForMs > 15000) {
+            await this.handlePlaybackFault('no-progress');
+        }
+    }
+
+    private async handlePlaybackFault(reason: string): Promise<void> {
+        if (!this.playing) {
+            return;
+        }
+
+        const mediaElement = this.options.getMediaElement();
+        this.playing = false;
+        this.paused = false;
+        this.pauseTime = mediaElement?.currentTime || this.pauseTime;
+        this.stopProgressUpdates();
+        this.stopPlaybackHealthWatchdog();
+        console.warn(`WebAudio playback stopped after ${reason}.`);
+        await this.notifyPlaybackStateChanged(false);
     }
 
     private startProgressUpdates(): void {
