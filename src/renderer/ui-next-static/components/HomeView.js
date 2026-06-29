@@ -57,7 +57,12 @@
   }
 
   function recentRow(t, onPlay) {
-    return h('div', { class: 'mb-track-row-compact', onclick: function () { onPlay(t); } }, [
+    return h('button', {
+      class: 'mb-track-row-compact',
+      type: 'button',
+      'aria-label': '\u64ad\u653e ' + ((t && t.title) || ''),
+      onclick: function () { onPlay(t); }
+    }, [
       cover(t.cover, 'mb-cover--xs'),
       h('div', { class: 'mb-row__titles' }, [
         h('div', { class: 'mb-row__title ellipsis' }, t.title),
@@ -77,7 +82,7 @@
         ]),
         h('div', { class: 'mb-daily-desktop__discovery' }, [
           trackRail('今日推荐', daily.dailyRecommendations, o.onPlayTrack),
-          playlistRail('网易云推荐歌单', o.netease, o.onOpenPlaylist)
+          playlistRail('网易云推荐歌单', o.netease, o.onOpenPlaylist, 'netease')
         ]),
         trackRail('最近沉迷', daily.recentlyObsessed, o.onPlayTrack),
         syncPanel(daily.syncSummary, o.onOpenMigrationDashboard)
@@ -176,20 +181,20 @@
         ? h('div', { class: 'mb-daily-rail__tracks' }, items.map(function (track) {
           return dailyTrack(track, onPlay);
         }))
-        : railSkeleton('暂无歌曲')
+        : emptyRailState('暂无歌曲', '播放或收藏几首歌后，这里会给出可直接开听的推荐')
     ]);
   }
 
-  function playlistRail(title, playlists, onOpenPlaylist) {
+  function playlistRail(title, playlists, onOpenPlaylist, kind) {
     var items = (playlists || []).slice(0, 8);
-    return h('div', { class: 'mb-playlist-rail' }, [
+    return h('div', { class: 'mb-playlist-rail', 'data-rail-kind': kind || 'playlist' }, [
       h('div', { class: 'mb-daily-rail__head' }, [
         h('span', { class: 'mb-daily-rail__title' }, title),
         h('span', { class: 'mb-daily-rail__count numeric' }, String(items.length))
       ]),
       items.length
         ? cards(items, onOpenPlaylist)
-        : playlistSkeleton('暂无歌单')
+        : emptyRailState('暂无歌单', '网易云推荐暂未返回，请确认远程播放代理和登录状态')
     ]);
   }
 
@@ -208,22 +213,10 @@
     ]);
   }
 
-  function railSkeleton(label) {
-    return h('div', { class: 'mb-daily-rail__skeleton', 'aria-label': label }, [
-      h('span', { class: 'mb-daily-rail__empty' }, label),
-      h('span', { class: 'mb-daily-rail__skeleton-row' }),
-      h('span', { class: 'mb-daily-rail__skeleton-row' }),
-      h('span', { class: 'mb-daily-rail__skeleton-row' })
-    ]);
-  }
-
-  function playlistSkeleton(label) {
-    return h('div', { class: 'mb-playlist-rail__skeleton', 'aria-label': label }, [
-      h('span', { class: 'mb-daily-rail__empty' }, label),
-      h('span', { class: 'mb-playlist-rail__skeleton-card' }),
-      h('span', { class: 'mb-playlist-rail__skeleton-card' }),
-      h('span', { class: 'mb-playlist-rail__skeleton-card' }),
-      h('span', { class: 'mb-playlist-rail__skeleton-card' })
+  function emptyRailState(title, detail) {
+    return h('div', { class: 'mb-daily-rail__empty-state', role: 'status' }, [
+      h('span', { class: 'mb-daily-rail__empty-title' }, title),
+      h('span', { class: 'mb-daily-rail__empty-detail' }, detail)
     ]);
   }
 

@@ -20,6 +20,21 @@
     orbit: '\u73af\u5f62'
   };
 
+  var PICKUP_VISUALIZER_BINS = {
+    classic: 54,
+    energy: 41,
+    pulse: 27,
+    orbit: 54
+  };
+
+  var SONIC_RESPONSE_PRESET_OPTIONS = [
+    { id: 'balanced', name: '均衡聆听', note: '默认动态，什么歌都稳' },
+    { id: 'bass-pulse', name: '低频律动', note: '鼓点和低音更有推力' },
+    { id: 'vocal-flow', name: '人声流线', note: '旋律和人声更顺' },
+    { id: 'neon-energy', name: '电子霓虹', note: '瞬态更快，高频更亮' },
+    { id: 'nocturne', name: '夜间柔光', note: '柔和少闪，深夜耐听' }
+  ];
+
   function ImmersivePlayerView(o) {
     var track = o.track || null;
     var duration = o.duration || (track && track.duration) || 0;
@@ -455,8 +470,226 @@
           h('span', { html: MBIcons.palette(14) }),
           h('span', { 'data-sonic-theme-name': 'true' }, o.sonicThemeName || 'Nocturnal')
         ])
+      ]),
+      renderSonicDebugPanel(o)
+    ]);
+  }
+
+  function renderSonicDebugPanel(o) {
+    var snapshot = o.sonicDebugSnapshot || {};
+    var audio = snapshot.audio || {};
+    var spectrum = snapshot.spectrum || {};
+    var responseProfile = snapshot.responseProfile || {};
+    var responsePreset = snapshot.responsePreset || o.sonicResponsePreset || {};
+    var release = snapshot.release || {};
+    var lastTrigger = snapshot.lastTrigger || {};
+
+    return h('div', { class: 'mb-immersive__sonic-debug' }, [
+      h('div', { class: 'mb-immersive__sonic-debug-head' }, [
+        h('div', { class: 'mb-immersive__sonic-debug-copy' }, [
+          h('span', { class: 'mb-immersive__sonic-debug-kicker' }, 'Sonic Tuning'),
+          h('span', { class: 'mb-immersive__sonic-debug-title' }, '\u89c2\u6d4b\u4e0e\u8c03\u6821')
+        ]),
+        h('button', {
+          class: 'mb-immersive__style-chip',
+          type: 'button',
+          onclick: o.onSonicResetTuning
+        }, '\u6062\u590d\u9ed8\u8ba4')
+      ]),
+      renderSonicPresetSelector(responsePreset, o),
+      h('div', { class: 'mb-immersive__sonic-debug-grid' }, [
+        renderSonicDebugMetric('\u80fd\u91cf', formatSonicDebugNumber(audio.energy), '\u573a\u666f\u603b\u9a71\u52a8'),
+        renderSonicDebugMetric('\u4eae\u5ea6', formatSonicDebugNumber(audio.brightness), '\u9ad8\u9891\u5149\u611f'),
+        renderSonicDebugMetric('\u987a\u6ed1', formatSonicDebugNumber(audio.smoothness), '\u62ac\u5347\u566a\u70b9'),
+        renderSonicDebugMetric('\u5bc6\u5ea6', formatSonicDebugNumber(audio.density), '\u6fc0\u6d3b\u9891\u5e26')
+      ]),
+      h('div', { class: 'mb-immersive__sonic-debug-grid' }, [
+        renderSonicDebugMetric('\u9891\u8c31\u6765\u6e90', formatSonicSpectrumSource(spectrum), spectrum.isFallback ? '\u5f85\u673a\u515c\u5e95' : '\u64ad\u653e\u94fe\u8def'),
+        renderSonicDebugMetric('\u5cf0\u503c', formatSonicDebugNumber(spectrum.max), spectrum.hasSignal ? '\u6709\u4fe1\u53f7' : '\u65e0\u4fe1\u53f7'),
+        renderSonicDebugMetric('\u975e\u96f6', String(Math.round(spectrum.nonZeroBins || 0)), '\u9891\u70b9\u6570'),
+        renderSonicDebugMetric('\u957f\u5ea6', String(Math.round(spectrum.length || 0)), 'bins')
+      ]),
+      h('div', { class: 'mb-immersive__sonic-debug-grid' }, [
+        renderSonicDebugMetric('\u4f4e\u9891\u8df3\u52a8', formatSonicDebugNumber(responseProfile.lowMotion), '\u9f13\u70b9\u4e0e\u4f4e\u97f3'),
+        renderSonicDebugMetric('\u4e2d\u9891\u8d77\u4f0f', formatSonicDebugNumber(responseProfile.midMotion), '\u4eba\u58f0\u4e0e\u4e3b\u65cb\u5f8b'),
+        renderSonicDebugMetric('\u9ad8\u9891\u95ea\u70c1', formatSonicDebugNumber(responseProfile.highMotion), '\u9563\u7247\u4e0e\u7a7a\u6c14\u611f'),
+        renderSonicDebugMetric('\u52a8\u6001\u8303\u56f4', formatSonicDebugNumber(responseProfile.dynamicRange), formatSonicTuningReadiness(responseProfile))
+      ]),
+      h('div', { class: 'mb-immersive__sonic-debug-release' }, [
+        renderSonicDebugMetric('\u91ca\u653e\u5c3e\u8ff9', formatSonicDebugNumber(release.time, 2) + 's', release.active ? '\u5f53\u524d\u751f\u6548\u4e2d' : '\u7b49\u5f85\u89e6\u53d1'),
+        renderSonicDebugMetric('\u6700\u8fd1\u89e6\u53d1', lastTrigger.action || 'None', formatSonicTriggerSource(lastTrigger)),
+        renderSonicRangeControl('\u5c3e\u8ff9\u65f6\u957f', release.time, 0.4, 4, 0.05, 's', o.onSonicReleaseTime)
+      ]),
+      renderSonicTriggerPanel('Pulse', '\u6ce2\u8109', snapshot.pulseTrigger || {}, snapshot.frequencyScale || {}, o),
+      renderSonicTriggerPanel('Meteor', '\u6d41\u661f', snapshot.meteorTrigger || {}, snapshot.frequencyScale || {}, o)
+    ]);
+  }
+
+  function renderSonicPresetSelector(responsePreset, o) {
+    var currentId = (responsePreset && responsePreset.id) || (o.sonicResponsePreset && o.sonicResponsePreset.id) || 'balanced';
+    return h('div', { class: 'mb-immersive__sonic-preset-panel', 'data-sonic-response-preset': currentId }, [
+      h('div', { class: 'mb-immersive__sonic-preset-head' }, [
+        h('span', { class: 'mb-immersive__sonic-debug-section-title' }, '动态预设'),
+        h('span', { class: 'mb-immersive__sonic-debug-section-note' }, (responsePreset && responsePreset.name) || '均衡聆听')
+      ]),
+      h('div', { class: 'mb-immersive__sonic-preset-list' }, SONIC_RESPONSE_PRESET_OPTIONS.map(function (preset) {
+        var active = preset.id === currentId;
+        return h('button', {
+          class: 'mb-immersive__sonic-preset-chip' + (active ? ' is-active' : ''),
+          type: 'button',
+          'aria-pressed': active ? 'true' : 'false',
+          onclick: function () {
+            o.onSonicResponsePreset && o.onSonicResponsePreset(preset.id);
+          }
+        }, [
+          h('span', { class: 'mb-immersive__sonic-preset-name' }, preset.name),
+          h('span', { class: 'mb-immersive__sonic-preset-note' }, preset.note)
+        ]);
+      }))
+    ]);
+  }
+
+  function renderSonicTriggerPanel(triggerName, title, trigger, frequencyScale, o) {
+    var config = trigger.config || {};
+    var range = Array.isArray(trigger.range) ? trigger.range : [0, 0];
+    var rangeHz = triggerName === 'Meteor' ? frequencyScale.meteorRangeHz : frequencyScale.pulseRangeHz;
+    return h('div', { class: 'mb-immersive__sonic-debug-section' }, [
+      h('div', { class: 'mb-immersive__sonic-debug-section-head' }, [
+        h('span', { class: 'mb-immersive__sonic-debug-section-title' }, title),
+        h('span', { class: 'mb-immersive__sonic-debug-section-note' }, '\u9891\u5e26 ' + range[0] + ' - ' + range[1] + ' \u00b7 \u7ea6 ' + formatSonicFrequencyRangeHz(rangeHz))
+      ]),
+      h('div', { class: 'mb-immersive__sonic-debug-grid mb-immersive__sonic-debug-grid--trigger' }, [
+        renderSonicDebugMetric('\u89e6\u53d1\u80fd\u91cf', formatSonicDebugNumber(trigger.energy), '\u5f53\u524d\u6ce2\u5f62'),
+        renderSonicDebugMetric('\u95e8\u69db', formatSonicDebugNumber(trigger.threshold), '\u81ea\u9002\u5e94\u9608\u503c'),
+        renderSonicDebugMetric('\u51b7\u5374', String(Math.round(trigger.cooldown || 0)), '\u5e27'),
+        renderSonicDebugMetric('\u4f59\u91cf', String(Math.round(trigger.hold || 0)), '\u5269\u4f59\u5e27')
+      ]),
+      renderSonicModeSwitch(triggerName, config.mode || 'Auto Beat', o),
+      renderSonicRangeControl('\u7075\u654f\u5ea6', config.sensitivity, 0, 1, 0.01, '', function (value) {
+        o.onSonicTriggerControl && o.onSonicTriggerControl(triggerName, 'sensitivity', value);
+      }),
+      renderSonicRangeControl('\u9608\u503c', config.threshold, 0, 1, 0.01, '', function (value) {
+        o.onSonicTriggerControl && o.onSonicTriggerControl(triggerName, 'threshold', value);
+      }),
+      renderSonicRangeControl('\u51b2\u51fb\u5f3a\u5ea6', config.pulseStrength, 0.05, 1, 0.01, '', function (value) {
+        o.onSonicTriggerControl && o.onSonicTriggerControl(triggerName, 'pulseStrength', value);
+      }),
+      renderSonicRangeControl('\u51b7\u5374\u5e27', trigger.cooldown, 0, 360, 1, '', function (value) {
+        o.onSonicTriggerControl && o.onSonicTriggerControl(triggerName, 'cooldown', value);
+      }),
+      (config.mode || 'Auto Beat') === 'Manual' ? renderSonicRangeControl('\u76ee\u6807\u9891\u70b9', config.freqIndex >= 0 ? config.freqIndex : Math.round((range[0] + range[1]) / 2), 0, 511, 1, function (value) {
+        return ' \u00b7 \u7ea6 ' + formatSonicFrequencyHz(sonicFrequencyForBinFromScale(value, frequencyScale));
+      }, function (value) {
+        o.onSonicTriggerControl && o.onSonicTriggerControl(triggerName, 'freqIndex', value);
+      }) : null,
+      h('div', { class: 'mb-immersive__sonic-debug-band-grid' }, [
+        renderSonicRangeControl('\u8d77\u59cb\u9891\u5e26', config.bandStart, 0, 511, 1, '', function (value) {
+          o.onSonicTriggerControl && o.onSonicTriggerControl(triggerName, 'bandStart', value);
+        }),
+        renderSonicRangeControl('\u7ec8\u6b62\u9891\u5e26', config.bandEnd, 0, 511, 1, '', function (value) {
+          o.onSonicTriggerControl && o.onSonicTriggerControl(triggerName, 'bandEnd', value);
+        })
       ])
     ]);
+  }
+
+  function renderSonicModeSwitch(triggerName, mode, o) {
+    var current = mode === 'Manual' ? 'Manual' : 'Auto Beat';
+    return h('div', { class: 'mb-immersive__sonic-debug-mode', role: 'tablist' }, ['Auto Beat', 'Manual'].map(function (item) {
+      return h('button', {
+        class: 'mb-immersive__sonic-debug-mode-chip' + (item === current ? ' is-active' : ''),
+        type: 'button',
+        role: 'tab',
+        'aria-selected': item === current ? 'true' : 'false',
+        onclick: function () {
+          o.onSonicTriggerControl && o.onSonicTriggerControl(triggerName, 'mode', item);
+        }
+      }, item);
+    }));
+  }
+
+  function renderSonicDebugMetric(label, value, note) {
+    return h('div', { class: 'mb-immersive__sonic-debug-metric' }, [
+      h('span', { class: 'mb-immersive__sonic-debug-metric-label' }, label),
+      h('span', { class: 'mb-immersive__sonic-debug-metric-value numeric' }, value),
+      h('span', { class: 'mb-immersive__sonic-debug-metric-note' }, note)
+    ]);
+  }
+
+  function formatSonicTriggerSource(trigger) {
+    if (!trigger || !trigger.action || trigger.action === 'None') return '\u6682\u65e0\u89e6\u53d1';
+    var source = trigger.source === 'rule' ? '\u89c4\u5219\u5c42' : (trigger.source === 'fallback' ? '\u515c\u5e95' : trigger.source || '\u672a\u77e5');
+    var age = Number(trigger.ageMs);
+    var ageText = Number.isFinite(age) && age >= 0 ? (age / 1000).toFixed(1) + 's' : '--';
+    return source + ' / ' + ageText + ' / ' + formatSonicDebugNumber(trigger.strength, 2);
+  }
+
+  function formatSonicSpectrumSource(spectrum) {
+    if (!spectrum || !spectrum.source || spectrum.source === 'empty') return '\u7a7a';
+    if (spectrum.source === 'fallback') return '\u5f85\u673a';
+    if (spectrum.source === 'live') return spectrum.hasSignal ? '\u5b9e\u65f6' : '\u5b9e\u65f6\u00b7\u65e0\u4fe1\u53f7';
+    return String(spectrum.source);
+  }
+
+  function formatSonicTuningReadiness(profile) {
+    if (!profile || !profile.tuningReady) return '\u7b49\u5f85\u771f\u6b4c\u4fe1\u53f7';
+    var dominant = profile.dominantBand === 'low' ? '\u4f4e\u9891\u4e3b\u5bfc' : (profile.dominantBand === 'mid' ? '\u4e2d\u9891\u4e3b\u5bfc' : '\u9ad8\u9891\u4e3b\u5bfc');
+    return '\u53ef\u7528\u4e8e\u8c03\u53c2 / ' + dominant;
+  }
+
+  function sonicFrequencyForBinFromScale(bin, frequencyScale) {
+    var scale = frequencyScale || {};
+    var minHz = Math.max(1, Number(scale.minHz) || 20);
+    var maxHz = Math.max(minHz * 1.01, Number(scale.maxHz) || 20000);
+    var binCount = Math.max(1, Number(scale.binCount) || 512);
+    var ratio = Math.max(0, Math.min(1, Number(bin) / binCount));
+
+    return minHz * Math.pow(maxHz / minHz, ratio);
+  }
+
+  function formatSonicFrequencyHz(value) {
+    var hz = Number(value);
+    if (!Number.isFinite(hz) || hz <= 0) return '-- Hz';
+    if (hz >= 1000) return (hz / 1000).toFixed(hz >= 10000 ? 1 : 2) + ' kHz';
+    return Math.round(hz) + ' Hz';
+  }
+
+  function formatSonicFrequencyRangeHz(range) {
+    if (!Array.isArray(range) || range.length < 2) return '-- Hz';
+    return formatSonicFrequencyHz(range[0]) + ' - ' + formatSonicFrequencyHz(range[1]);
+  }
+
+  function renderSonicRangeControl(label, value, min, max, step, suffix, onChange) {
+    var normalized = Number.isFinite(Number(value)) ? Number(value) : min;
+    var decimals = Math.max(0, String(step).indexOf('.') >= 0 ? String(step).split('.')[1].length : 0);
+    var formatSuffix = function (nextValue) {
+      return typeof suffix === 'function' ? suffix(Number(nextValue)) : (suffix || '');
+    };
+    var input = h('input', {
+      class: 'mb-immersive__sonic-debug-range-input',
+      type: 'range',
+      min: String(min),
+      max: String(max),
+      step: String(step),
+      onchange: function () {
+        onChange && onChange(Number(input.value));
+      },
+      oninput: function () {
+        valueNode.textContent = formatSonicDebugNumber(input.value, decimals) + formatSuffix(input.value);
+      }
+    });
+    input.value = String(normalized);
+    var valueNode = h('span', { class: 'mb-immersive__sonic-debug-range-value numeric' }, formatSonicDebugNumber(normalized, decimals) + formatSuffix(normalized));
+    return h('label', { class: 'mb-immersive__sonic-debug-range' }, [
+      h('span', { class: 'mb-immersive__sonic-debug-range-label' }, label),
+      h('span', { class: 'mb-immersive__sonic-debug-range-control' }, [input, valueNode])
+    ]);
+  }
+
+  function formatSonicDebugNumber(value, digits) {
+    var numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '--';
+    return numeric.toFixed(Number.isFinite(Number(digits)) ? Number(digits) : 3);
   }
 
   function renderCachedVideos(o, background, currentQuality) {
@@ -893,11 +1126,17 @@
 
   function renderWaveform(ratio, duration, position, onSeek, compact, visualizerStyle) {
     var style = visualizerStyle || 'classic';
-    var count = style === 'energy' ? 32 : (style === 'pulse' ? 18 : (style === 'orbit' ? 40 : (compact ? 48 : 84)));
+    var count = pickupVisualizerBinCount(style, compact);
     var bars = [];
     for (var i = 0; i < count; i++) {
       var wave = Math.sin(i * 0.47) * 0.5 + Math.sin(i * 0.13 + 1.6) * 0.5;
-      var height = 20 + Math.abs(wave) * 54 + ((i % 7) * 2);
+      var height = style === 'pulse'
+        ? 12 + Math.abs(wave) * 20 + ((i % 5) * 1)
+        : style === 'energy'
+          ? 18 + Math.abs(wave) * 34 + ((i % 6) * 1)
+          : style === 'orbit'
+            ? 16 + Math.abs(wave) * 28 + ((i % 5) * 1)
+            : 18 + Math.abs(wave) * 30 + ((i % 6) * 1);
       var active = i / (count - 1) <= ratio;
       var barStyle = { height: height.toFixed(1) + '%' };
       if (style === 'orbit') {
@@ -913,6 +1152,7 @@
       class: 'mb-immersive__wave mb-immersive__wave--' + style,
       'data-role': 'immersive-wave',
       'data-visualizer-style': style,
+      'data-pickup-bin-count': String(count),
       'aria-label': '\u62fe\u97f3\u5668',
       style: {
         '--seek-ratio': ratio.toFixed(5),
@@ -945,6 +1185,12 @@
     return root;
   }
 
+  function pickupVisualizerBinCount(style, compact) {
+    var base = PICKUP_VISUALIZER_BINS[style] || PICKUP_VISUALIZER_BINS.classic;
+    var count = compact ? Math.max(8, Math.floor(base * 0.66)) : base;
+    return Math.max(8, Math.min(54, count));
+  }
+
   function bindSeek(root, onSeek, initialRatio) {
     var bars = root.querySelector('.mb-immersive__wave-bars');
     var seekTrack = root.querySelector('.mb-immersive__seek-track');
@@ -967,12 +1213,28 @@
       if (bars) bars.classList.toggle('is-dragging', enabled);
       if (seekTrack) seekTrack.classList.toggle('is-dragging', enabled);
     }
+    function updateSliderAttributes(target) {
+      if (!target) return;
+      target.setAttribute('role', 'slider');
+      target.setAttribute('tabindex', '0');
+      target.setAttribute('aria-valuemin', '0');
+      target.setAttribute('aria-valuemax', '100');
+      target.setAttribute('aria-valuenow', String(Math.round(currentRatio * 100)));
+      target.setAttribute('aria-valuetext', Math.round(currentRatio * 100) + '%');
+      target.setAttribute('aria-label', target === bars ? '\u6c89\u6d78\u62fe\u97f3\u8df3\u8f6c' : '\u6c89\u6d78\u64ad\u653e\u8fdb\u5ea6');
+    }
+    function updateAllSliderAttributes() {
+      updateSliderAttributes(bars);
+      updateSliderAttributes(seekTrack);
+    }
+    updateAllSliderAttributes();
     function down(e) {
       activeTarget = e.currentTarget || bars || seekTrack;
       activeRect = activeTarget.getBoundingClientRect();
       dragging = true;
       setDraggingClass(true);
       onSeek(ratioFromEvent(e, activeTarget), true);
+      updateAllSliderAttributes();
       window.addEventListener('mousemove', move);
       window.addEventListener('touchmove', move, { passive: false });
       window.addEventListener('mouseup', up);
@@ -982,6 +1244,7 @@
     function move(e) {
       if (!dragging) return;
       onSeek(ratioFromEvent(e), true);
+      updateAllSliderAttributes();
       e.preventDefault();
     }
     function up(e) {
@@ -991,15 +1254,32 @@
       onSeek(currentRatio, false);
       activeTarget = null;
       activeRect = null;
+      updateAllSliderAttributes();
       window.removeEventListener('mousemove', move);
       window.removeEventListener('touchmove', move);
       window.removeEventListener('mouseup', up);
       window.removeEventListener('touchend', up);
     }
+    function keydown(e) {
+      var handled = true;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') currentRatio -= 0.01;
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') currentRatio += 0.01;
+      else if (e.key === 'PageDown') currentRatio -= 0.1;
+      else if (e.key === 'PageUp') currentRatio += 0.1;
+      else if (e.key === 'Home') currentRatio = 0;
+      else if (e.key === 'End') currentRatio = 1;
+      else handled = false;
+      if (!handled) return;
+      currentRatio = clamp(currentRatio, 0, 1);
+      updateAllSliderAttributes();
+      onSeek(currentRatio, false);
+      e.preventDefault();
+    }
     [bars, seekTrack].forEach(function (target) {
       if (!target) return;
       target.addEventListener('mousedown', down);
       target.addEventListener('touchstart', down, { passive: false });
+      target.addEventListener('keydown', keydown);
     });
   }
 

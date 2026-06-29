@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     media: {
         readAudioFile: (filePath: string) => ipcRenderer.invoke('file:readAudio', filePath),
         createAudioStreamUrl: (filePath: string) => ipcRenderer.invoke('file:createAudioStreamUrl', filePath),
+        createRemoteAudioStreamUrl: (remoteUrl: string) => ipcRenderer.invoke('file:createRemoteAudioStreamUrl', remoteUrl),
         selectImageData: (maxSizeBytes: number) => ipcRenderer.invoke('media:selectImageData', maxSizeBytes)
     },
 
@@ -193,6 +194,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getPosition: () => ipcRenderer.invoke('native-audio:get-position'),
         getRenderStats: () => ipcRenderer.invoke('native-audio:get-render-stats'),
         resetRenderStats: () => ipcRenderer.invoke('native-audio:reset-render-stats'),
+        getFrequencySpectrum: (binCount: number) => ipcRenderer.invoke('native-audio:get-frequency-spectrum', binCount),
 
         // 均衡器控制
         setEqualizerEnabled: (enabled: boolean) => ipcRenderer.invoke('native-audio:set-equalizer-enabled', enabled),

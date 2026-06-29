@@ -18,6 +18,16 @@
   var ImmersivePerfProbe = global.MBImmersivePerfProbe;
   var SourceBadge = global.MBSourceBadge;
 
+  function isPlaybackShortcutTarget(target) {
+    if (!target) return true;
+    var tag = target.tagName || '';
+    var role = target.getAttribute ? target.getAttribute('role') : '';
+    if (target.isContentEditable) return false;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'A') return false;
+    if (role === 'button' || role === 'slider' || role === 'textbox' || role === 'combobox' || role === 'menuitem') return false;
+    return true;
+  }
+
   function NewMusicShell(opts) {
     this.el = document.querySelector(opts.el);
     if (!this.el) throw new Error('鏂扮晫闈㈡寕杞界偣涓嶅瓨鍦? ' + opts.el);
@@ -104,7 +114,7 @@
         rememberPosition: false,
         desktopLyrics: true,
         playerTheme: 'default',
-        regionTone: 'peach-blush',
+        regionTone: 'default',
         systemTray: true,
         trayCloseBehavior: 'exit',
         trayStartMinimized: false
@@ -117,6 +127,7 @@
       immersiveVisualizerStyle: 'classic',
       immersiveBackground: { type: 'cover', src: '' },
       immersiveSonicTheme: { id: 'nocturnal', name: 'Nocturnal' },
+      sonicResponsePreset: { id: 'balanced', name: '均衡聆听' },
       immersiveCachedVideos: [],
       immersiveBackgroundFilter: 'video',
       immersiveBackgroundPanelMode: 'regular',
@@ -154,14 +165,30 @@
     this._sharedSpectrum = [];
     this._sharedSpectrumAt = 0;
     this._sharedSpectrumBinCount = 0;
+    this._sharedSpectrumCache = Object.create(null);
     this._sharedSpectrumWindowMs = 33;
+    this._volumeRuntimeThrottleMs = 50;
+    this._volumeRuntimeLastSentAt = 0;
+    this._volumeRuntimeTimer = 0;
+    this._volumeRuntimePendingRatio = null;
     this._sonicTerrainFrame = 0;
     this._sonicTerrainLastUpdate = 0;
     this._sonicTerrainSpectrum = [];
+    this._sonicTerrainCache = null;
     this._sonicTerrainEnergy = { bass: 0, mid: 0, air: 0, total: 0 };
     this._immersiveSonicBackgroundFrame = 0;
     this._immersiveSonicBackgroundLastUpdate = 0;
+    this._immersiveSonicBackgroundPausedAt = 0;
     this._immersiveSonicBackgroundSpectrum = [];
+    this._immersiveSonicSpectrumStatus = {
+      source: 'empty',
+      isFallback: false,
+      length: 0,
+      rawLength: 0,
+      nonZeroBins: 0,
+      max: 0,
+      mean: 0
+    };
     this._immersiveSonicScene = null;
     this._immersiveSonicCanvas = null;
     this._immersiveLastActive = -1;
@@ -173,6 +200,7 @@
     this._immersiveLastWaveActive = -1;
     this._immersiveLastRatio = -1;
     this._immersivePerf = ImmersivePerfProbe ? new ImmersivePerfProbe() : null;
+    this._handleVisualRuntimeVisibilityChange = this._handleVisualRuntimeVisibilityChange.bind(this);
     this.root = h('div', { class: 'ui-next-shell' });
     this.el.appendChild(this.root);
     this._bindGlobal();
@@ -198,6 +226,16 @@
       completed: true,
       skipped: true,
       completedAt: new Date().toISOString()
+    });
+    this.render();
+  };
+
+  NewMusicShell.prototype.completeMigrationOnboarding = function (reason) {
+    this.state.migrationOnboarding = saveMigrationOnboardingState({
+      completed: true,
+      skipped: false,
+      completedAt: new Date().toISOString(),
+      reason: reason || 'migration'
     });
     this.render();
   };
@@ -387,13 +425,44 @@
   };
 
   NewMusicShell.prototype.onVolumeChange = function (ratio) {
+    ratio = clamp(ratio, 0, 1);
+    this.state.volume = ratio;
+    if (this.state.muted && ratio > 0) this.state.muted = false;
     if (this.adapter && typeof this.adapter.setVolume === 'function') {
-      this.adapter.setVolume(ratio);
+      this._queueRuntimeVolumeChange(ratio);
       return;
     }
-    this.state.volume = clamp(ratio, 0, 1);
-    if (this.state.muted && ratio > 0) this.state.muted = false;
     this.render();
+  };
+
+  NewMusicShell.prototype._queueRuntimeVolumeChange = function (ratio) {
+    var self = this;
+    var now = performance.now();
+    this._volumeRuntimePendingRatio = ratio;
+
+    function flush() {
+      self._volumeRuntimeTimer = 0;
+      if (self._volumeRuntimePendingRatio == null) return;
+      var pending = self._volumeRuntimePendingRatio;
+      self._volumeRuntimePendingRatio = null;
+      self._volumeRuntimeLastSentAt = performance.now();
+      if (self.adapter && typeof self.adapter.setVolume === 'function') {
+        self.adapter.setVolume(pending);
+      }
+    }
+
+    if (now - this._volumeRuntimeLastSentAt >= this._volumeRuntimeThrottleMs) {
+      if (this._volumeRuntimeTimer) {
+        clearTimeout(this._volumeRuntimeTimer);
+        this._volumeRuntimeTimer = 0;
+      }
+      flush();
+      return;
+    }
+
+    if (!this._volumeRuntimeTimer) {
+      this._volumeRuntimeTimer = setTimeout(flush, this._volumeRuntimeThrottleMs - (now - this._volumeRuntimeLastSentAt));
+    }
   };
 
   NewMusicShell.prototype.onOpenPlaylist = function (playlistId) {
@@ -765,26 +834,67 @@
     return Boolean(document.hidden);
   };
 
-  NewMusicShell.prototype._getSharedFrequencySpectrum = function (binCount, now) {
+  NewMusicShell.prototype._handleVisualRuntimeVisibilityChange = function () {
+    if (this._isVisualRuntimePaused()) {
+      this._immersiveSonicBackgroundPausedAt = performance.now();
+      this._sharedSpectrumAt = 0;
+      this._sharedSpectrumCache = Object.create(null);
+      if (this._immersiveSonicBackgroundFrame) {
+        cancelAnimationFrame(this._immersiveSonicBackgroundFrame);
+        this._immersiveSonicBackgroundFrame = 0;
+      }
+      return;
+    }
+
+    this._immersiveSonicBackgroundLastUpdate = 0;
+    if (this._isSonicBackgroundActive()) {
+      this._ensureImmersiveSonicBackgroundLoop();
+    }
+  };
+
+  NewMusicShell.prototype._isSonicBackgroundActive = function () {
+    var bg = this.state.immersiveBackground || {};
+    return this.state.view === 'immersive-player' && bg.type === 'sonic-topography';
+  };
+
+  NewMusicShell.prototype._getSonicVisualFrameMs = function () {
+    if (this._isVisualRuntimePaused()) return 1000;
+    if (!this.state.isPlaying) return 250;
+    return 33;
+  };
+
+  NewMusicShell.prototype._getSharedFrequencySpectrum = function (binCount, now, consumer) {
     var requested = Math.max(0, Number(binCount) || 0);
     if (!requested || !this.adapter || typeof this.adapter.getFrequencySpectrum !== 'function') {
       return [];
     }
 
     now = now || performance.now();
-    var cachedEnough = this._sharedSpectrum.length >= requested
-      && this._sharedSpectrumBinCount >= requested
-      && now - this._sharedSpectrumAt <= this._sharedSpectrumWindowMs;
+    var key = consumer || 'default';
+    var bucket = this._sharedSpectrumCache[key] || {
+      spectrum: [],
+      at: 0,
+      binCount: 0
+    };
+    var cachedEnough = bucket.spectrum.length >= requested
+      && bucket.binCount >= requested
+      && now - bucket.at <= this._sharedSpectrumWindowMs;
     if (cachedEnough) {
-      return this._sharedSpectrum.slice(0, requested);
+      return bucket.spectrum.slice(0, requested);
     }
 
-    var sampleCount = Math.max(requested, this._sharedSpectrumBinCount || 0);
+    var sampleCount = Math.max(requested, bucket.binCount || 0);
     var sample = this.adapter.getFrequencySpectrum(sampleCount);
-    this._sharedSpectrum = Array.isArray(sample) ? sample.slice(0, sampleCount) : [];
+    bucket = {
+      spectrum: Array.isArray(sample) ? sample.slice(0, sampleCount) : [],
+      at: now,
+      binCount: sampleCount
+    };
+    this._sharedSpectrumCache[key] = bucket;
+    this._sharedSpectrum = bucket.spectrum;
     this._sharedSpectrumAt = now;
     this._sharedSpectrumBinCount = sampleCount;
-    return this._sharedSpectrum.slice(0, requested);
+    return bucket.spectrum.slice(0, requested);
   };
 
   NewMusicShell.prototype._tick = function () {
@@ -992,7 +1102,7 @@
         return;
       }
 
-      if (e.code === 'Space') {
+      if (e.code === 'Space' && isPlaybackShortcutTarget(e.target)) {
         e.preventDefault();
         if (self.state.isPlaying) self.onPause(); else self.onResume();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -1010,6 +1120,8 @@
         else { self._skipNext(); self.render(); }
       }
     });
+
+    addGlobal(document, 'visibilitychange', this._handleVisualRuntimeVisibilityChange);
   };
 
   NewMusicShell.prototype.dispose = function () {
@@ -1035,6 +1147,10 @@
     if (this._sonicTerrainFrame) {
       cancelAnimationFrame(this._sonicTerrainFrame);
       this._sonicTerrainFrame = 0;
+    }
+    if (this._volumeRuntimeTimer) {
+      clearTimeout(this._volumeRuntimeTimer);
+      this._volumeRuntimeTimer = 0;
     }
     this._destroyImmersiveSonicScene();
   };
@@ -1202,8 +1318,10 @@
     if (!rows.length || nextIndex < 0 || nextIndex >= rows.length) return false;
     if (previousIndex >= 0 && previousIndex < rows.length && previousIndex !== nextIndex) {
       rows[previousIndex].classList.remove('is-selected');
+      rows[previousIndex].setAttribute('aria-current', 'false');
     }
     rows[nextIndex].classList.add('is-selected');
+    rows[nextIndex].setAttribute('aria-current', 'true');
     rows[nextIndex].scrollIntoView({block: 'nearest'});
     return true;
   };
@@ -1211,7 +1329,7 @@
   NewMusicShell.prototype._handleSearchKeydown = function (e) {
     if (!this.state.searchFocused) return;
     var filtered = applySearchFilter(this.state.searchResults, this.state.searchFilter);
-    var flat = (filtered.local || []).concat(filtered.netease || []);
+    var flat = (filtered.local || []).slice(0, 8).concat((filtered.netease || []).slice(0, 8));
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (flat.length) {
@@ -1317,6 +1435,19 @@
     this.render();
   };
 
+  NewMusicShell.prototype.applyRegionTone = function (regionTone) {
+    if (!this.root) return;
+    if (regionTone && regionTone !== 'default') {
+      if (this.root.getAttribute('data-region-tone') !== regionTone) {
+        this.root.setAttribute('data-region-tone', regionTone);
+      }
+      return;
+    }
+    if (this.root.hasAttribute && this.root.hasAttribute('data-region-tone')) {
+      this.root.removeAttribute('data-region-tone');
+    }
+  };
+
   NewMusicShell.prototype.render = function () {
     var s = this.state;
     var self = this;
@@ -1326,6 +1457,7 @@
     this._immersiveLastWordKey = '';
     this.root.className = 'ui-next-shell';
     this.root.classList.toggle('is-immersive', s.view === 'immersive-player');
+    this.root.setAttribute('data-playing', s.isPlaying ? 'true' : 'false');
 
     if (s.view === 'immersive-player') {
       var immersiveDialog = s.confirmDialog ? this._renderConfirmDialog(s.confirmDialog) : null;
@@ -1522,7 +1654,8 @@
       ? this._renderPlaylistContextMenu(s.playlistContextMenu)
       : null;
     var confirmDialog = s.confirmDialog ? this._renderConfirmDialog(s.confirmDialog) : null;
-    this.root.setAttribute('data-region-tone', (s.settings && s.settings.regionTone) || 'peach-blush');
+    var regionTone = (s.settings && s.settings.regionTone) || 'default';
+    this.applyRegionTone(regionTone);
 
     clear(this.root, [
       withRole(sidebar, 'mb-sidebar'),
@@ -1538,6 +1671,7 @@
 
     this._topbarEl = this.root.querySelector('.mb-topbar');
     this._searchInput = this.root.querySelector('.mb-search__input');
+    this._sonicTerrainCache = null;
     if (s.searchFocused && this._searchInput && document.activeElement !== this._searchInput) {
       var v = s.searchQuery;
       this._searchInput.focus();
@@ -1556,9 +1690,8 @@
         return;
       }
 
-      var player = self.root && self.root.querySelector('.mb-player--sonic-topography');
-      var tiles = player ? player.querySelectorAll('.mb-player__sonic-tile') : [];
-      if (!player || !tiles.length) {
+      var cache = self._getSonicTerrainCache();
+      if (!cache || !cache.player || !cache.tileData.length) {
         self._sonicTerrainFrame = 0;
         return;
       }
@@ -1570,7 +1703,7 @@
 
       if (now - self._sonicTerrainLastUpdate >= 66) {
         self._sonicTerrainLastUpdate = now;
-        self._updateSonicTerrain(player, tiles, now);
+        self._updateSonicTerrain(cache.player, cache.tileData, now);
       }
 
       self._sonicTerrainFrame = requestAnimationFrame(step);
@@ -1579,9 +1712,37 @@
     this._sonicTerrainFrame = requestAnimationFrame(step);
   };
 
-  NewMusicShell.prototype._updateSonicTerrain = function (player, tiles, now) {
-    var sonicTerrainTiles = Math.max(32, Math.min(96, tiles.length));
-    var rawSpectrum = this._getSharedFrequencySpectrum(sonicTerrainTiles, now);
+  NewMusicShell.prototype._getSonicTerrainCache = function () {
+    if (this._sonicTerrainCache && this._sonicTerrainCache.player && this._sonicTerrainCache.player.isConnected) {
+      return this._sonicTerrainCache;
+    }
+
+    var player = this.root && this.root.querySelector('.mb-player--sonic-topography');
+    var tiles = player ? player.querySelectorAll('.mb-player__sonic-tile') : [];
+    if (!player || !tiles.length) {
+      this._sonicTerrainCache = null;
+      return null;
+    }
+
+    var tileData = Array.prototype.map.call(tiles, function (tile, i) {
+      return {
+        element: tile,
+        region: tile.getAttribute('data-sonic-region') || 'mid',
+        index: Number(tile.getAttribute('data-sonic-index')) || i,
+        x: Number(tile.style.getPropertyValue('--sonic-x')) || 0,
+        y: Number(tile.style.getPropertyValue('--sonic-y')) || 0,
+        distance: Number(tile.style.getPropertyValue('--sonic-distance')) || 0,
+        seed: Number(tile.style.getPropertyValue('--sonic-seed')) || 0
+      };
+    });
+
+    this._sonicTerrainCache = { player: player, tileData: tileData };
+    return this._sonicTerrainCache;
+  };
+
+  NewMusicShell.prototype._updateSonicTerrain = function (player, tileData, now) {
+    var sonicTerrainTiles = Math.max(32, Math.min(96, tileData.length));
+    var rawSpectrum = this.state.isPlaying ? this._getSharedFrequencySpectrum(sonicTerrainTiles, now, 'playerbar-terrain') : [];
     var spectrum = this._stabilizeSonicTerrainSpectrum(rawSpectrum, sonicTerrainTiles);
     var bands = this._deriveSonicTerrainBands(spectrum);
     var elapsed = (now || performance.now()) * 0.001;
@@ -1591,14 +1752,15 @@
     player.style.setProperty('--sonic-mid', bands.mid.toFixed(3));
     player.style.setProperty('--sonic-air', bands.air.toFixed(3));
 
-    for (var i = 0; i < tiles.length; i++) {
-      var tile = tiles[i];
-      var region = tile.getAttribute('data-sonic-region') || 'mid';
-      var index = Number(tile.getAttribute('data-sonic-index')) || i;
-      var x = Number(tile.style.getPropertyValue('--sonic-x')) || 0;
-      var y = Number(tile.style.getPropertyValue('--sonic-y')) || 0;
-      var distance = Number(tile.style.getPropertyValue('--sonic-distance')) || 0;
-      var seed = Number(tile.style.getPropertyValue('--sonic-seed')) || 0;
+    for (var i = 0; i < tileData.length; i++) {
+      var tileInfo = tileData[i];
+      var tile = tileInfo.element;
+      var region = tileInfo.region;
+      var index = tileInfo.index;
+      var x = tileInfo.x;
+      var y = tileInfo.y;
+      var distance = tileInfo.distance;
+      var seed = tileInfo.seed;
       var mapped = spectrum.length ? spectrum[index % spectrum.length] || 0 : 0;
       var band = region === 'bass' ? bands.bass : (region === 'air' ? bands.air : bands.mid);
       var wave = Math.sin(elapsed * (1.1 + seed) + x * 0.31 + y * 0.72) * 0.5 + 0.5;
@@ -1606,8 +1768,16 @@
       var height = Math.min(1, 0.05 + wave * 0.10 + mapped * 0.45 + band * (0.62 + centerFalloff * 0.55));
       var glow = Math.min(1, mapped * 0.62 + band * 0.78 + centerFalloff * bands.total * 0.34);
 
-      tile.style.setProperty('--sonic-height', height.toFixed(3));
-      tile.style.setProperty('--sonic-glow', glow.toFixed(3));
+      var previousHeight = Number(tile.getAttribute('data-sonic-height-value')) || 0;
+      var previousGlow = Number(tile.getAttribute('data-sonic-glow-value')) || 0;
+      if (Math.abs(previousHeight - height) >= 0.012) {
+        tile.setAttribute('data-sonic-height-value', height.toFixed(3));
+        tile.style.setProperty('--sonic-height', height.toFixed(3));
+      }
+      if (Math.abs(previousGlow - glow) >= 0.012) {
+        tile.setAttribute('data-sonic-glow-value', glow.toFixed(3));
+        tile.style.setProperty('--sonic-glow', glow.toFixed(3));
+      }
     }
   };
 
@@ -2002,7 +2172,7 @@
 
   NewMusicShell.prototype._renderMigrationOnboarding = function () {
     var state = this.state.migrationOnboarding || {};
-    if (state.completed) return null;
+    if (state.completed || this.hasCompletedMigrationActivity()) return null;
 
     var self = this;
     return h('section', { class: 'mb-onboarding', 'aria-label': '网易云迁移引导' }, [
@@ -2019,17 +2189,17 @@
       ]),
       h('div', { class: 'mb-onboarding__actions' }, [
         h('button', {
-          class: 'mb-btn mb-btn--primary',
+          class: 'mb-btn mb-btn--primary mb-onboarding__primary',
           type: 'button',
           onclick: function () { self.startMigrationOnboardingLogin(); }
         }, '登录网易云'),
         h('button', {
-          class: 'mb-btn mb-btn--ghost',
+          class: 'mb-btn mb-btn--ghost mb-onboarding__secondary',
           type: 'button',
           onclick: function () { self.startMigrationOnboardingLocalImport(); }
         }, '先导入本地音乐'),
         h('button', {
-          class: 'mb-btn mb-btn--ghost',
+          class: 'mb-btn mb-btn--ghost mb-onboarding__tertiary',
           type: 'button',
           onclick: function () { self.openMigrationOnboardingDashboard(); }
         }, '查看迁移状态'),
@@ -2040,6 +2210,20 @@
         }, '暂时跳过')
       ])
     ]);
+  };
+
+  NewMusicShell.prototype.hasCompletedMigrationActivity = function () {
+    var dashboard = this.state.migrationDashboard || {};
+    var summary = dashboard.summary || {};
+    var syncSummary = dashboard.syncSummary || {};
+    return Boolean(
+      (summary.reportCount || 0) > 0 ||
+      (summary.completedCount || 0) > 0 ||
+      (summary.partialCount || 0) > 0 ||
+      (summary.added || 0) > 0 ||
+      (summary.existing || 0) > 0 ||
+      (syncSummary.total || 0) > 0
+    );
   };
 
   NewMusicShell.prototype._renderTrackList = function (title, results, query) {
@@ -2092,6 +2276,8 @@
       queueCount: s.queue.tracks.length,
       queueOpen: s.queueOpen,
       sonicThemeName: (s.immersiveSonicTheme && s.immersiveSonicTheme.name) || 'Nocturnal',
+      sonicResponsePreset: s.sonicResponsePreset || { id: 'balanced', name: '均衡聆听' },
+      sonicDebugSnapshot: this.getImmersiveSonicDebugSnapshot(),
       onBack: function () { self.exitImmersivePlayer(); },
       onToggleStylePanel: function () {
         s.immersiveStylePanelOpen = !s.immersiveStylePanelOpen;
@@ -2120,6 +2306,18 @@
       },
       onCycleSonicTheme: function () {
         self._cycleImmersiveSonicTheme();
+      },
+      onSonicTriggerControl: function (trigger, key, value) {
+        self._updateImmersiveSonicTriggerControl(trigger, key, value);
+      },
+      onSonicReleaseTime: function (value) {
+        self._updateImmersiveSonicReleaseTime(value);
+      },
+      onSonicResponsePreset: function (presetId) {
+        self._setImmersiveSonicResponsePreset(presetId);
+      },
+      onSonicResetTuning: function () {
+        self._resetImmersiveSonicTuning();
       },
       onBackgroundPanelMode: function (mode) {
         s.immersiveBackgroundPanelMode = mode === 'sonic' ? 'sonic' : 'regular';
@@ -2445,10 +2643,18 @@
       self.render();
     }
 
-    function switchInput(checked, key) {
+    function settingId(key, suffix) {
+      return 'mb-setting-' + String(key).replace(/[^a-zA-Z0-9_-]/g, '-') + '-' + suffix;
+    }
+
+    function switchInput(checked, key, labelId, descId) {
+      var inputId = settingId(key, 'input');
       var input = h('input', {
         class: 'mb-settings-switch__input',
         type: 'checkbox',
+        id: inputId,
+        'aria-labelledby': labelId,
+        'aria-describedby': descId,
         onchange: function () { updateSetting(key, input.checked); }
       });
       input.checked = Boolean(checked);
@@ -2461,22 +2667,29 @@
     }
 
     function settingToggle(label, desc, checked, key) {
+      var labelId = settingId(key, 'label');
+      var descId = settingId(key, 'desc');
       return h('label', { class: 'mb-settings-row' }, [
         h('span', { class: 'mb-settings-row__copy' }, [
-          h('span', { class: 'mb-settings-row__label' }, label),
-          h('span', { class: 'mb-settings-row__desc' }, desc)
+          h('span', { class: 'mb-settings-row__label', id: labelId }, label),
+          h('span', { class: 'mb-settings-row__desc', id: descId }, desc)
         ]),
-        switchInput(checked, key)
+        switchInput(checked, key, labelId, descId)
       ]);
     }
 
     function settingSelect(label, desc, value, key, options) {
+      var labelId = settingId(key, 'label');
+      var descId = settingId(key, 'desc');
       var optionList = options || [
         { value: 'exit', label: '\u76f4\u63a5\u9000\u51fa' },
         { value: 'minimize', label: '\u6700\u5c0f\u5316\u5230\u6258\u76d8' }
       ];
       var select = h('select', {
         class: 'mb-settings-select',
+        id: settingId(key, 'input'),
+        'aria-labelledby': labelId,
+        'aria-describedby': descId,
         onchange: function () { updateSetting(key, select.value); }
       }, optionList.map(function (option) {
         return h('option', { value: option.value }, option.label);
@@ -2485,49 +2698,67 @@
 
       return h('div', { class: 'mb-settings-row' }, [
         h('span', { class: 'mb-settings-row__copy' }, [
-          h('span', { class: 'mb-settings-row__label' }, label),
-          h('span', { class: 'mb-settings-row__desc' }, desc)
+          h('span', { class: 'mb-settings-row__label', id: labelId }, label),
+          h('span', { class: 'mb-settings-row__desc', id: descId }, desc)
         ]),
         select
       ]);
     }
 
     function settingRange(label, desc, value, key, min, max, step, suffix) {
+      var labelId = settingId(key, 'label');
+      var descId = settingId(key, 'desc');
+      var valueId = settingId(key, 'value');
       var input = h('input', {
         class: 'mb-settings-range',
         type: 'range',
+        id: settingId(key, 'input'),
+        'aria-labelledby': labelId,
+        'aria-describedby': descId + ' ' + valueId,
+        'aria-valuemin': String(min),
+        'aria-valuemax': String(max),
+        'aria-valuenow': String(value),
+        'aria-valuetext': String(value) + (suffix || ''),
         min: String(min),
         max: String(max),
         step: String(step),
         onchange: function () { updateSetting(key, Number(input.value)); },
         oninput: function () {
           valueNode.textContent = input.value + (suffix || '');
+          input.setAttribute('aria-valuenow', input.value);
+          input.setAttribute('aria-valuetext', input.value + (suffix || ''));
         }
       });
       input.value = String(value);
-      var valueNode = h('span', { class: 'mb-settings-value' }, String(value) + (suffix || ''));
+      var valueNode = h('span', { class: 'mb-settings-value', id: valueId }, String(value) + (suffix || ''));
       return h('div', { class: 'mb-settings-row' }, [
         h('span', { class: 'mb-settings-row__copy' }, [
-          h('span', { class: 'mb-settings-row__label' }, label),
-          h('span', { class: 'mb-settings-row__desc' }, desc)
+          h('span', { class: 'mb-settings-row__label', id: labelId }, label),
+          h('span', { class: 'mb-settings-row__desc', id: descId }, desc)
         ]),
         h('span', { class: 'mb-settings-control' }, [input, valueNode])
       ]);
     }
 
     function settingColor(label, desc, value, key) {
+      var labelId = settingId(key, 'label');
+      var descId = settingId(key, 'desc');
+      var valueId = settingId(key, 'value');
       var input = h('input', {
         class: 'mb-settings-color',
         type: 'color',
+        id: settingId(key, 'input'),
+        'aria-labelledby': labelId,
+        'aria-describedby': descId + ' ' + valueId,
         onchange: function () { updateSetting(key, input.value); },
         oninput: function () { valueNode.textContent = input.value; }
       });
       input.value = value || '#335eea';
-      var valueNode = h('span', { class: 'mb-settings-value' }, input.value);
+      var valueNode = h('span', { class: 'mb-settings-value', id: valueId }, input.value);
       return h('div', { class: 'mb-settings-row' }, [
         h('span', { class: 'mb-settings-row__copy' }, [
-          h('span', { class: 'mb-settings-row__label' }, label),
-          h('span', { class: 'mb-settings-row__desc' }, desc)
+          h('span', { class: 'mb-settings-row__label', id: labelId }, label),
+          h('span', { class: 'mb-settings-row__desc', id: descId }, desc)
         ]),
         h('span', { class: 'mb-settings-control' }, [input, valueNode])
       ]);
@@ -2573,7 +2804,8 @@
             { value: 'default', label: 'Auralux' },
             { value: 'sonic-topography', label: 'Sonic Topography' }
           ]),
-          settingSelect('界面配色', '切换左侧、主内容、顶部和播放器的区域色调。', settings.regionTone || 'peach-blush', 'regionTone', [
+          settingSelect('界面配色', '切换左侧、主内容、顶部和播放器的区域色调。', settings.regionTone || 'default', 'regionTone', [
+            { value: 'default', label: 'Auralux 默认' },
             { value: 'peach-blush', label: '粉桃流光' },
             { value: 'lilac-sun', label: '紫阳渐变' },
             { value: 'candy-violet', label: '莓蓝梦境' },
@@ -2743,6 +2975,7 @@
     this._sharedSpectrum = [];
     this._sharedSpectrumAt = 0;
     this._sharedSpectrumBinCount = 0;
+    this._sharedSpectrumCache = Object.create(null);
   };
 
   NewMusicShell.prototype._getImmersiveVisualPosition = function () {
@@ -2825,6 +3058,13 @@
     return node.querySelectorAll('.mb-immersive__lyric-char');
   };
 
+  NewMusicShell.prototype._getImmersivePickupBinCount = function (wave, bars) {
+    var barCount = bars && typeof bars.length === 'number' ? bars.length : 0;
+    if (!wave || !barCount) return barCount;
+    var declared = Math.floor(Number(wave.getAttribute('data-pickup-bin-count')) || barCount);
+    return Math.min(72, Math.max(1, declared));
+  };
+
   NewMusicShell.prototype._updateImmersiveProgressOnly = function (visualPosition, now) {
     if (this.state.view !== 'immersive-player') return;
     if (this._immersivePerf) this._immersivePerf.markProgressUpdate();
@@ -2858,7 +3098,8 @@
     var style = this.state.immersiveVisualizerStyle || 'classic';
     var bars = cache.bars;
     var lastActive = bars.length ? Math.round((bars.length - 1) * ratio) : -1;
-    var rawSpectrum = bars.length ? this._getSharedFrequencySpectrum(bars.length, now) : [];
+    var pickupBins = this._getImmersivePickupBinCount(cache.wave, bars);
+    var rawSpectrum = bars.length ? (this.state.isPlaying ? this._getSharedFrequencySpectrum(pickupBins, now, 'immersive-pickup') : []) : [];
     var spectrum = this._stabilizeImmersiveSpectrum(rawSpectrum, bars.length, now);
     if (bars.length && (lastActive !== this._immersiveLastWaveActive || spectrum.length)) {
       this._immersiveLastWaveActive = lastActive;
@@ -3103,7 +3344,7 @@
   };
 
   NewMusicShell.prototype._ensureImmersiveSonicBackgroundLoop = function () {
-    if (this.state.view !== 'immersive-player') return;
+    if (!this._isSonicBackgroundActive()) return;
     var bg = this.state.immersiveBackground || {};
     var canvas = this._getImmersiveDomCache().sonicCanvas;
     if (bg.type === 'sonic-topography' && canvas && !this._immersiveSonicScene) {
@@ -3122,11 +3363,12 @@
 
     function step(now) {
       if (self._isVisualRuntimePaused()) {
+        self._immersiveSonicBackgroundPausedAt = now;
         self._immersiveSonicBackgroundFrame = 0;
         return;
       }
 
-      if (self.state.view !== 'immersive-player') {
+      if (!self._isSonicBackgroundActive()) {
         self._destroyImmersiveSonicScene();
         self._immersiveSonicBackgroundFrame = 0;
         return;
@@ -3147,7 +3389,8 @@
         return;
       }
 
-      if (now - self._immersiveSonicBackgroundLastUpdate >= 33) {
+      var frameMs = self._getSonicVisualFrameMs();
+      if (now - self._immersiveSonicBackgroundLastUpdate >= frameMs) {
         self._immersiveSonicBackgroundLastUpdate = now;
         self._updateImmersiveSonicBackground(scene, now);
       }
@@ -3167,6 +3410,7 @@
     this._immersiveSonicCanvas = canvas;
     this._immersiveSonicScene = new global.MBSonicTopographyScene(canvas);
     this._syncImmersiveSonicTheme(this._immersiveSonicScene);
+    this._syncImmersiveSonicResponsePreset(this._immersiveSonicScene);
     return this._immersiveSonicScene;
   };
 
@@ -3187,6 +3431,15 @@
       });
     } else if (cache.sonicThemeName && cache.sonicThemeName.textContent !== label) {
       cache.sonicThemeName.textContent = label;
+    }
+  };
+
+  NewMusicShell.prototype._syncImmersiveSonicResponsePreset = function (scene) {
+    if (!scene || typeof scene.setResponsePreset !== 'function') return;
+    var preset = this.state.sonicResponsePreset || { id: 'balanced', name: '均衡聆听' };
+    scene.setResponsePreset(preset.id || 'balanced');
+    if (typeof scene.getResponsePreset === 'function') {
+      this.state.sonicResponsePreset = scene.getResponsePreset();
     }
   };
 
@@ -3221,17 +3474,94 @@
     this._immersiveSonicScene = null;
     this._immersiveSonicCanvas = null;
     this._immersiveSonicBackgroundSpectrum = [];
+    this._immersiveSonicSpectrumStatus = {
+      source: 'empty',
+      isFallback: false,
+      length: 0,
+      rawLength: 0,
+      nonZeroBins: 0,
+      max: 0,
+      mean: 0
+    };
   };
 
   NewMusicShell.prototype._updateImmersiveSonicBackground = function (scene, now) {
-    var count = 128;
-    var rawSpectrum = this._getSharedFrequencySpectrum(count, now);
-    var spectrum = this._stabilizeImmersiveSonicBackgroundSpectrum(rawSpectrum, count, now);
-    scene.updateAudioData(spectrum, Boolean(this.state.isPlaying));
+    if (this._isVisualRuntimePaused()) return;
+    var count = 512;
+    var rawSpectrum = this.state.isPlaying ? this._getSharedFrequencySpectrum(count, now, 'sonic-topography') : [];
+    var spectrum = this._stabilizeImmersiveSonicBackgroundSpectrum(rawSpectrum, count, now, this.state.isPlaying);
+    var status = this._immersiveSonicSpectrumStatus;
+    scene.updateAudioData(spectrum, Boolean(this.state.isPlaying), status);
+    this._refreshImmersiveSonicDebugSnapshot(scene);
     scene.render();
   };
 
-  NewMusicShell.prototype._stabilizeImmersiveSonicBackgroundSpectrum = function (rawSpectrum, count, now) {
+  NewMusicShell.prototype.getImmersiveSonicDebugSnapshot = function () {
+    return this._immersiveSonicDebugSnapshot || null;
+  };
+
+  NewMusicShell.prototype._refreshImmersiveSonicDebugSnapshot = function (scene) {
+    this._immersiveSonicDebugSnapshot = scene && typeof scene.getDebugSnapshot === 'function'
+      ? scene.getDebugSnapshot()
+      : null;
+    return this._immersiveSonicDebugSnapshot;
+  };
+
+  NewMusicShell.prototype._applyImmersiveSonicSceneUpdate = function (updater) {
+    var cache = this._getImmersiveDomCache();
+    var scene = this._immersiveSonicScene || (cache.sonicCanvas ? this._ensureImmersiveSonicScene(cache.sonicCanvas) : null);
+    if (!scene || typeof updater !== 'function') return null;
+    updater(scene);
+    this._refreshImmersiveSonicDebugSnapshot(scene);
+    scene.render();
+    return scene;
+  };
+
+  NewMusicShell.prototype._updateImmersiveSonicTriggerControl = function (trigger, key, value) {
+    var patch = {};
+    patch[key] = value;
+    var scene = this._applyImmersiveSonicSceneUpdate(function (activeScene) {
+      if (typeof activeScene.updateTriggerConfig === 'function') {
+        activeScene.updateTriggerConfig(trigger, patch);
+      }
+    });
+    if (scene) this.render();
+  };
+
+  NewMusicShell.prototype._updateImmersiveSonicReleaseTime = function (value) {
+    var scene = this._applyImmersiveSonicSceneUpdate(function (activeScene) {
+      if (typeof activeScene.setVisualReleaseTime === 'function') {
+        activeScene.setVisualReleaseTime(value);
+      }
+    });
+    if (scene) this.render();
+  };
+
+  NewMusicShell.prototype._setImmersiveSonicResponsePreset = function (presetId) {
+    var scene = this._applyImmersiveSonicSceneUpdate(function (activeScene) {
+      if (typeof activeScene.setResponsePreset === 'function') {
+        activeScene.setResponsePreset(presetId || 'balanced');
+      }
+    });
+    if (scene && typeof scene.getResponsePreset === 'function') {
+      this.state.sonicResponsePreset = scene.getResponsePreset();
+      this.render();
+    }
+  };
+
+  NewMusicShell.prototype._resetImmersiveSonicTuning = function () {
+    var scene = this._applyImmersiveSonicSceneUpdate(function (activeScene) {
+      if (typeof activeScene.resetDebugTuning === 'function') {
+        activeScene.resetDebugTuning();
+      }
+    });
+    if (scene && typeof scene.getResponsePreset === 'function') {
+      this.state.sonicResponsePreset = scene.getResponsePreset();
+    }
+    if (scene) this.render();
+  };
+
+  NewMusicShell.prototype._stabilizeImmersiveSonicBackgroundSpectrum = function (rawSpectrum, count, now, allowFallback) {
     if (Array.isArray(rawSpectrum) && rawSpectrum.length) {
       var last = this._immersiveSonicBackgroundSpectrum || [];
       this._immersiveSonicBackgroundSpectrum = rawSpectrum.slice(0, count).map(function (value, index) {
@@ -3239,11 +3569,30 @@
         var previous = typeof last[index] === 'number' ? last[index] : normalized;
         return previous + (normalized - previous) * 0.36;
       });
+      this._immersiveSonicSpectrumStatus = this._summarizeImmersiveSonicSpectrum(this._immersiveSonicBackgroundSpectrum, {
+        source: 'live',
+        isFallback: false,
+        rawLength: rawSpectrum.length
+      });
       return this._immersiveSonicBackgroundSpectrum;
     }
 
     var elapsed = (now || performance.now()) * 0.001;
     var fallback = this._immersiveSonicBackgroundSpectrum || [];
+    if (!allowFallback) {
+      fallback = fallback.map(function (value) {
+        return Math.max(0, value * 0.82);
+      }).filter(function (value) {
+        return value > 0.012;
+      });
+      this._immersiveSonicBackgroundSpectrum = fallback.slice(0, count);
+      this._immersiveSonicSpectrumStatus = this._summarizeImmersiveSonicSpectrum(this._immersiveSonicBackgroundSpectrum, {
+        source: fallback.length ? 'release' : 'empty',
+        isFallback: Boolean(fallback.length),
+        rawLength: 0
+      });
+      return this._immersiveSonicBackgroundSpectrum;
+    }
     if (!fallback.length) {
       fallback = Array.from({ length: count }, function (_, index) {
         return 0.04 + (Math.sin(elapsed * 0.8 + index * 0.31) * 0.5 + 0.5) * 0.05;
@@ -3254,7 +3603,37 @@
       });
     }
     this._immersiveSonicBackgroundSpectrum = fallback.slice(0, count);
+    this._immersiveSonicSpectrumStatus = this._summarizeImmersiveSonicSpectrum(this._immersiveSonicBackgroundSpectrum, {
+      source: fallback.length ? 'fallback' : 'empty',
+      isFallback: Boolean(fallback.length),
+      rawLength: 0
+    });
     return this._immersiveSonicBackgroundSpectrum;
+  };
+
+  NewMusicShell.prototype._summarizeImmersiveSonicSpectrum = function (spectrum, options) {
+    var source = options && options.source ? options.source : 'empty';
+    var isFallback = Boolean(options && options.isFallback);
+    var rawLength = Number(options && options.rawLength) || 0;
+    var length = Array.isArray(spectrum) ? spectrum.length : 0;
+    var max = 0;
+    var sum = 0;
+    var nonZeroBins = 0;
+    for (var i = 0; i < length; i++) {
+      var value = Math.max(0, Math.min(1, Number(spectrum[i]) || 0));
+      if (value > 0.0005) nonZeroBins++;
+      if (value > max) max = value;
+      sum += value;
+    }
+    return {
+      source: length ? source : 'empty',
+      isFallback: isFallback,
+      length: length,
+      rawLength: rawLength,
+      nonZeroBins: nonZeroBins,
+      max: max,
+      mean: length ? sum / length : 0
+    };
   };
 
   NewMusicShell.prototype._positionImmersiveLyricNodeForMode = function (node, mode, slot) {
@@ -3498,7 +3877,8 @@
     var normalized = {
       completed: Boolean(nextState && nextState.completed),
       skipped: Boolean(nextState && nextState.skipped),
-      completedAt: nextState && typeof nextState.completedAt === 'string' ? nextState.completedAt : ''
+      completedAt: nextState && typeof nextState.completedAt === 'string' ? nextState.completedAt : '',
+      reason: nextState && typeof nextState.reason === 'string' ? nextState.reason : ''
     };
     try {
       localStorage.setItem('auralux.onboarding.migration', JSON.stringify(normalized));

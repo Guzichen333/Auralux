@@ -19,7 +19,14 @@
     var buffer = opts.buffered != null ? h('div', { class: 'mb-slider__buffer' }) : null;
     var thumb = h('div', { class: 'mb-slider__thumb' });
     var track = h('div', { class: 'mb-slider__track' }, [buffer, fill].filter(Boolean));
-    var root = h('div', { class: 'mb-slider' + (opts.variant ? ' mb-slider--' + opts.variant : '') }, [track, thumb]);
+    var root = h('div', {
+      class: 'mb-slider' + (opts.variant ? ' mb-slider--' + opts.variant : ''),
+      role: 'slider',
+      tabindex: '0',
+      'aria-label': opts.label || '\u64ad\u653e\u63a7\u5236',
+      'aria-valuemin': '0',
+      'aria-valuemax': '100'
+    }, [track, thumb]);
     var currentRatio = 0;
 
     function applyRatio(ratio) {
@@ -28,6 +35,8 @@
       fill.style.width = (ratio * 100) + '%';
       if (buffer) buffer.style.width = (ratio * 100) + '%';
       thumb.style.left = (ratio * 100) + '%';
+      root.setAttribute('aria-valuenow', String(Math.round(ratio * 100)));
+      if (opts.valueText) root.setAttribute('aria-valuetext', opts.valueText(ratio));
     }
     applyRatio(opts.value != null ? opts.value : 0);
 
@@ -68,8 +77,26 @@
       opts.onChange && opts.onChange(currentRatio, false);
       opts.onCommit && opts.onCommit(currentRatio);
     }
+    function onKeyDown(e) {
+      var handled = true;
+      var next = currentRatio;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next -= (opts.keyboardStep || 0.01);
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next += (opts.keyboardStep || 0.01);
+      else if (e.key === 'PageDown') next -= (opts.keyboardPageStep || 0.1);
+      else if (e.key === 'PageUp') next += (opts.keyboardPageStep || 0.1);
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = 1;
+      else handled = false;
+      if (!handled) return;
+      next = clamp(next, 0, 1);
+      applyRatio(next);
+      opts.onChange && opts.onChange(next, false);
+      opts.onCommit && opts.onCommit(next);
+      e.preventDefault();
+    }
     root.addEventListener('mousedown', onDown);
     root.addEventListener('touchstart', onDown, { passive: false });
+    root.addEventListener('keydown', onKeyDown);
 
     return { root: root, applyRatio: applyRatio };
   }
@@ -107,6 +134,8 @@
     var progress = slider({
       value: progressRatio,
       variant: 'progress',
+      label: '\u64ad\u653e\u8fdb\u5ea6',
+      valueText: function (ratio) { return fmt(ratio * duration) + ' / ' + fmt(duration); },
       onChange: function (ratio, dragging) {
         // 拖动时实时更新当前时间显示（乐观）
         var pos = ratio * duration;
@@ -123,6 +152,9 @@
     var volume = slider({
       value: o.muted ? 0 : o.volume,
       variant: 'volume',
+      label: '\u97f3\u91cf',
+      valueText: function (ratio) { return Math.round(ratio * 100) + '%'; },
+      keyboardStep: 0.05,
       onChange: function (ratio) { o.onVolume(ratio); }
     });
 
@@ -244,15 +276,16 @@
     ]);
 
     return h('footer', {
-      class: 'mb-player' + (playerTheme === 'sonic-topography' ? ' mb-player--sonic-topography' : ''),
-      'data-player-theme': playerTheme
+      class: 'mb-player' + (playerTheme === 'sonic-topography' ? ' mb-player--sonic-topography' : '') + (o.isPlaying ? ' is-playing' : ''),
+      'data-player-theme': playerTheme,
+      'data-playing': o.isPlaying ? 'true' : 'false'
     }, [terrain, current, center, extras]);
   }
 
   function renderSonicTerrain() {
     var tiles = [];
-    var cols = 28;
-    var rows = 6;
+    var cols = 24;
+    var rows = 4;
     var total = cols * rows;
     var centerX = (cols - 1) / 2;
     var centerY = (rows - 1) / 2;

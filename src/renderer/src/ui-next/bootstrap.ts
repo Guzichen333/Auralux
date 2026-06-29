@@ -142,8 +142,12 @@ function renderStartupSplash(root: HTMLElement, tasks: StartupWarmupTaskState[] 
     const doneCount = taskItems.filter((task) => task.status === 'done' || task.status === 'degraded').length;
     const progress = Math.max(8, Math.round((doneCount / Math.max(1, taskItems.length)) * 100));
     const startupLogoSrc = assetUrl('auralux-logo-mascot.png');
+    const welcomeMessage = taskItems.some((task) => task.status === 'running')
+        ? '正在唤醒你的音乐空间'
+        : '音乐已准备好，马上进入';
 
     splash.innerHTML = [
+        '<div class="mb-startup__halo" aria-hidden="true"></div>',
         '<div class="mb-startup__inner">',
         '<div class="mb-startup__brand">',
         '<div class="mb-startup__mark"><img class="mb-startup__logo" src="',
@@ -151,12 +155,19 @@ function renderStartupSplash(root: HTMLElement, tasks: StartupWarmupTaskState[] 
         '" alt="Auralux"></div>',
         '<div>',
         '<div class="mb-startup__title">Auralux</div>',
-        '<div class="mb-startup__subtitle">正在准备你的音乐空间</div>',
+        '<div class="mb-startup__subtitle">',
+        escapeHtml(welcomeMessage),
         '</div>',
         '</div>',
-        '<div class="mb-startup__bar"><div class="mb-startup__bar-fill" style="width:',
+        '</div>',
+        '<div class="mb-startup__bar mb-startup__bar--pulse"><div class="mb-startup__bar-fill" style="width:',
         String(progress),
         '%"></div></div>',
+        '<div class="mb-startup__focus" aria-hidden="true">',
+        '<span class="mb-startup__focus-ring"></span>',
+        '<span class="mb-startup__focus-ring mb-startup__focus-ring--alt"></span>',
+        '<span class="mb-startup__focus-core"></span>',
+        '</div>',
         '<div class="mb-startup__tasks">',
         taskItems.map((task) => [
             '<div class="mb-startup__task is-',
@@ -409,7 +420,6 @@ async function mountUINext(options: {skipStartupWarmup?: boolean} = {}): Promise
     await waitForStartupExit(startupStartedAt, warmup);
     // Startup splash should never block the app shell indefinitely.
     startupSplashActive = false;
-    removeStartupSplash(root);
     if (!shellReady) {
         throw createNewMusicShellUnavailableError();
     }
@@ -421,8 +431,6 @@ async function mountUINext(options: {skipStartupWarmup?: boolean} = {}): Promise
 
     window.__newShellAdapter?.dispose?.();
     window.__newShell?.dispose?.();
-    startupSplashActive = false;
-    clearStartupSplash(root);
     const shell = new NewMusicShell({
         el: '#ui-next-root',
         mockData: createEmptyShellData()
@@ -447,6 +455,17 @@ async function mountUINext(options: {skipStartupWarmup?: boolean} = {}): Promise
         void adapter.refreshLibrarySnapshot();
     });
     window.__newShellNetEase = netEase;
+    const initialReadyStartedAt = performance.now();
+    const initialShellReady = await adapter.waitForInitialShellReady();
+    console.info('[ui-next] initial shell readiness gate', {
+        elapsedMs: Math.round(performance.now() - initialReadyStartedAt),
+        ready: initialShellReady
+    });
+    if (!initialShellReady) {
+        console.warn('[ui-next] initial shell readiness timed out, entering home with cached state');
+    }
+    removeStartupSplash(root);
+    clearStartupSplash(root);
 }
 
 function enterLocalModeFromStartupError(): void {

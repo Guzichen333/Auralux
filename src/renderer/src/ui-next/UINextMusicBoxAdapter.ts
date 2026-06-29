@@ -16,6 +16,7 @@ import {lyricsContentService} from '@/features/mediaAssets/service/LyricsContent
 import {windowGateway} from '@/infrastructure/electron';
 import {cacheManager} from '@/shared/cache';
 import {playlistCoverManifest} from './playlistCoverManifest';
+import type {UINextPlaylistLike} from './playlistCoverTypes';
 import {showToast} from '@utils/index.js';
 import {
     appInfoSettingsService,
@@ -49,6 +50,14 @@ const IMMERSIVE_VIDEO_CACHE_PRESETS: Record<Exclude<UINextImmersiveVideoQuality,
     quality: 'immersive-bg-v3-quality-1440p60-h264-24s-min'
 };
 const MATCHED_LOCAL_PLAYBACK_CONFIDENCE = 0.92;
+
+interface UINextPlaybackRollbackSnapshot {
+    playlist: Track[];
+    currentIndex: number;
+    currentTrack: Track | null;
+    position: number;
+    isPlaying: boolean;
+}
 
 interface UINextImmersiveSettings {
     lyricsMode: UINextImmersiveLyricsMode;
@@ -119,6 +128,7 @@ interface UINextPlaylist {
     name: string;
     description?: string;
     cover?: string;
+    coverSourceUrl?: string;
     trackCount: number;
     playCount?: number;
     source: UINextSource;
@@ -391,6 +401,7 @@ interface UINextShell {
     _scheduleImmersiveProgressUpdate?(): void;
     _updateImmersiveProgressOnly?(): void;
     _resetImmersiveVisualizerState?(): void;
+    _ensureImmersiveSonicBackgroundLoop?(): void;
     _updateVolumeOnly?(): void;
     _applyLiked?(trackId: string, liked: boolean): void;
     renderTrackLikeState?(trackId: string, liked: boolean): boolean;
@@ -399,6 +410,7 @@ interface UINextShell {
         status: 'idle' | 'loading' | 'ready' | 'error';
         message: string;
     }): void;
+    completeMigrationOnboarding?(reason?: string): void;
     confirm?(options: {
         title: string;
         message: string;
@@ -424,8 +436,11 @@ export class UINextMusicBoxAdapter {
     private readonly trackMap = new Map<string, Track>();
     private readonly playlistTrackCache = new Map<string, UINextTrack[]>();
     private readonly libraryTrackById = new Map<string, Track>();
+    private readonly neteaseRecommendationCoverHydrationKeys = new Set<string>();
     private libraryTracks: Track[] = [];
     private searchSession = 0;
+    private playbackRequestSeq = 0;
+    private lastPlaybackCoverRefreshKey = '';
     private lastNonZeroVolume = 0.7;
     private lastDesktopLyricsTrackPath: string | null = null;
     private lastDesktopLyricsPositionSync = 0;
@@ -434,6 +449,7 @@ export class UINextMusicBoxAdapter {
     private immersiveVideoPreparePath = '';
     private lastNetEaseSyncAt = 0;
     private netEaseStatusRefreshSession = 0;
+    private netEaseStatusRefreshPromise: Promise<void> | null = null;
     private netEaseUnavailableRecoveryTimer = 0;
     private librarySnapshotPromise: Promise<void> | null = null;
     private librarySnapshotReconcileTimer = 0;
@@ -448,8 +464,10 @@ export class UINextMusicBoxAdapter {
     private netEaseApiReadyUnsubscribe: (() => void) | null = null;
     private netEaseApiUnavailableUnsubscribe: (() => void) | null = null;
     private trayActionUnsubscribe: (() => void) | null = null;
+    private initialShellReadyPromise: Promise<void> | null = null;
     private readonly handleNetEaseLoginStatusChanged = (): void => {
         void this.syncNetEaseStatus(0, {force: true});
+        void this.refreshNetEaseRecommendations({force: true});
     };
 
     constructor(shell: UINextShell) {
@@ -463,8 +481,11 @@ export class UINextMusicBoxAdapter {
         void trayShellService.initSystemTray();
         this.bindTrayActions();
         void this.syncTrayPlaybackState();
-        this.loadLibrarySnapshot();
-        this.syncNetEaseStatus(0, {force: true});
+        this.initialShellReadyPromise = this.requestLibrarySnapshotRefresh()
+            .then(() => {
+                void this.refreshInitialNetEaseStateInBackground();
+            })
+            .then(() => undefined);
 
         this.playbackStateUnsubscribe = playbackController.subscribe((_state, change) => {
             if (this.applyLightweightPlaybackUpdate(change)) {
@@ -488,6 +509,7 @@ export class UINextMusicBoxAdapter {
         this.netEaseApiReadyUnsubscribe = window.electronAPI?.netease?.onApiReady((data) => {
             netEaseApiClient.setApiEndpoint(data.endpoint);
             void this.syncNetEaseStatus(0, {force: true});
+            void this.refreshNetEaseRecommendations({force: true});
         }) || null;
         this.netEaseApiUnavailableUnsubscribe = window.electronAPI?.netease?.onApiUnavailable((data) => {
             netEaseApiClient.setApiEndpoint(data.endpoint);
@@ -571,6 +593,7 @@ export class UINextMusicBoxAdapter {
         if (window.__mbImmersiveBackgroundError) {
             delete window.__mbImmersiveBackgroundError;
         }
+        playlistCoverManifest.dispose();
     }
 
     search(query: string): void {
@@ -637,14 +660,7 @@ export class UINextMusicBoxAdapter {
         const queue = this.resolveQueueForTrack(original);
         const startIndex = Math.max(0, queue.findIndex((item) => item.filePath === original.filePath));
 
-        this.applyPendingTrack(original, queue, startIndex);
-
-        void playbackController.setPlaylist(queue, startIndex)
-            .then(() => playbackController.loadTrack(original.filePath))
-            .then((loaded) => loaded ? playbackController.play() : false)
-            .catch((error) => {
-                console.error('[ui-next] playTrack failed', error);
-            });
+        void this.playPreparedTrack(original, queue, startIndex, 'playTrack');
     }
 
     pause(): void {
@@ -702,13 +718,7 @@ export class UINextMusicBoxAdapter {
             return;
         }
 
-        this.applyPendingTrack(track, queue, index);
-        void playbackController.setPlaylist(queue, index)
-            .then(() => playbackController.loadTrack(track.filePath))
-            .then((loaded) => loaded ? playbackController.play() : false)
-            .catch((error) => {
-                console.error('[ui-next] playQueueIndex failed', error);
-            });
+        void this.playPreparedTrack(track, queue, index, 'playQueueIndex');
     }
 
     removeQueueIndex(index: number): void {
@@ -717,13 +727,29 @@ export class UINextMusicBoxAdapter {
             return;
         }
 
-        const currentIndex = playbackController.getCurrentIndex();
+        const state = playbackController.getState();
+        const currentIndex = state.currentIndex;
         const nextQueue = queue.filter((_track, trackIndex) => trackIndex !== index);
         const nextIndex = index < currentIndex
             ? Math.max(0, currentIndex - 1)
             : Math.min(currentIndex, nextQueue.length - 1);
+        const replacementTrack = nextQueue[nextIndex];
 
-        void playbackController.setPlaylist(nextQueue, nextIndex);
+        if (index === currentIndex && replacementTrack) {
+            if (state.isPlaying) {
+                void this.playPreparedTrack(replacementTrack, nextQueue, nextIndex, 'removeQueueIndex');
+            } else {
+                void this.loadPreparedTrack(replacementTrack, nextQueue, nextIndex, 'removeQueueIndex');
+            }
+            return;
+        }
+
+        void playbackController.setPlaylist(nextQueue, nextIndex)
+            .then(() => this.syncPlaybackState())
+            .catch((error) => {
+                console.error('[ui-next] removeQueueIndex failed', error);
+                this.syncPlaybackState();
+            });
     }
 
     clearQueue(): void {
@@ -934,7 +960,7 @@ export class UINextMusicBoxAdapter {
     }
 
     openImmersivePlayer(_fromHistory = false): void {
-        this.loadImmersiveSettingsSnapshot({resetSonicBackground: true});
+        this.loadImmersiveSettingsSnapshot();
         this.shell.state.view = 'immersive-player';
         this.shell.state.activePlaylistId = null;
         this.shell.state.searchFocused = false;
@@ -983,6 +1009,9 @@ export class UINextMusicBoxAdapter {
             backgroundOriginalSrc: '',
             backgroundOptimizedSrc: '',
             backgroundOptimizedPreset: ''
+        });
+        window.requestAnimationFrame(() => {
+            this.shell._ensureImmersiveSonicBackgroundLoop?.();
         });
         showToast('\u5df2\u5207\u6362\u58f0\u573a\u5730\u5f62\u80cc\u666f', 'success', 1600);
     }
@@ -1709,12 +1738,7 @@ export class UINextMusicBoxAdapter {
             : originalTracks;
         const firstTrack = queue[0];
 
-        this.applyPendingTrack(firstTrack, queue, 0);
-        await playbackController.setPlaylist(queue, 0);
-        const loaded = await playbackController.loadTrack(firstTrack.filePath);
-        if (loaded) {
-            await playbackController.play();
-        }
+        await this.playPreparedTrack(firstTrack, queue, 0, 'playTracks');
     }
 
     minimizeWindow(): void {
@@ -1739,13 +1763,6 @@ export class UINextMusicBoxAdapter {
             return;
         }
 
-        const playlist = this.shell.mock.playlistById?.(playlistId) || null;
-        const externalId = Number(playlist?.externalId || 0);
-        if (playlist?.source === 'netease' && Number.isFinite(externalId) && externalId > 0) {
-            await this.openCloudNetEasePlaylist(playlist, externalId);
-            return;
-        }
-
         this.shell.state.view = 'playlist';
         this.shell.state.activePlaylistId = playlistId;
         this.shell.state.syncing = true;
@@ -1760,12 +1777,14 @@ export class UINextMusicBoxAdapter {
                 ? result.tracks
                 : this.resolvePlaylistTracks(result.playlist as {tracks?: Track[]; trackIds?: string[]});
             const playlist = result.playlist;
+            const playlistCoverSourceUrl = this.resolvePlaylistCover(playlist);
             const existingIndex = this.shell.mock.playlists.findIndex((item) => item.id === playlistId);
             const nextPlaylist: UINextPlaylist = {
                 id: playlist.id,
                 name: playlist.name,
                 description: playlist.description,
-                cover: this.resolvePlaylistCover(playlist),
+                cover: playlistCoverSourceUrl,
+                coverSourceUrl: playlistCoverSourceUrl,
                 trackCount: playlist.trackCount || tracks.length,
                 source: this.resolvePlaylistSource({...playlist, tracks}),
                 externalId: this.getPlaylistExternalId(playlist),
@@ -1773,14 +1792,18 @@ export class UINextMusicBoxAdapter {
                 updatedAt: playlist.modifiedAt ? new Date(playlist.modifiedAt).toLocaleDateString() : undefined,
                 trackIds: tracks.map((track) => this.trackId(track))
             };
-            nextPlaylist.cover = playlistCoverManifest.resolveCachedPlaylistCover(nextPlaylist) || nextPlaylist.cover;
+            const cachedPlaylistCover = playlistCoverManifest.resolveCachedPlaylistCover(nextPlaylist);
+            if (cachedPlaylistCover) {
+                nextPlaylist.cover = cachedPlaylistCover;
+            } else if (this.isRemoteCoverUrl(nextPlaylist.cover)) {
+                nextPlaylist.cover = undefined;
+            }
 
             if (existingIndex >= 0) {
                 this.shell.mock.playlists[existingIndex] = nextPlaylist;
             } else {
                 this.shell.mock.playlists.push(nextPlaylist);
             }
-            void playlistCoverManifest.ensurePlaylistCover(nextPlaylist);
             void playlistCoverManifest.resolveCachedPlaylistCoverAsync(nextPlaylist).then((cover) => {
                 if (!cover) return;
                 nextPlaylist.cover = cover;
@@ -1795,6 +1818,7 @@ export class UINextMusicBoxAdapter {
                 }
                 return this.playlistTrackCache.get(id) || [];
             };
+
         }).catch((error) => {
             console.error('[ui-next] openPlaylist failed', error);
         }).finally(() => {
@@ -1803,7 +1827,7 @@ export class UINextMusicBoxAdapter {
         });
     }
 
-    private async openCloudNetEasePlaylist(playlist: UINextPlaylist, externalId: number): Promise<void> {
+    async openCloudNetEasePlaylist(playlist: UINextPlaylist, externalId: number): Promise<void> {
         const playlistId = playlist.id;
         this.ensureRuntimePlaylist(playlist);
         this.shell.state.view = 'playlist';
@@ -1859,6 +1883,21 @@ export class UINextMusicBoxAdapter {
         this.ensureRuntimePlaylist(playlist);
         this.shell.state.view = 'playlist';
         this.shell.state.activePlaylistId = playlistId;
+
+        const cachedTracks = netEaseRecommendationService.getCachedPlaylistTracks(externalId);
+        if (cachedTracks.length > 0) {
+            this.applyNetEaseRecommendedPlaylistTracks(playlist, playlistId, cachedTracks);
+            this.shell.setPlaylistOpenState?.({
+                playlistId,
+                status: 'ready',
+                message: ''
+            });
+            this.shell.state.syncing = false;
+            this.shell.render();
+            void this.refreshNetEaseRecommendedPlaylistInBackground(playlist, playlistId, externalId);
+            return;
+        }
+
         this.shell.state.syncing = true;
         this.shell.setPlaylistOpenState?.({
             playlistId,
@@ -1866,34 +1905,69 @@ export class UINextMusicBoxAdapter {
             message: '\u6b63\u5728\u4ece\u7f51\u6613\u4e91\u52a0\u8f7d\u63a8\u8350\u6b4c\u5355\uff0c\u53ea\u4f5c\u4e3a\u8fdc\u7a0b\u64ad\u653e\u4e0d\u4f1a\u5bfc\u5165\u672c\u5730\u3002'
         });
         this.shell.render();
+        await this.refreshNetEaseRecommendedPlaylist(playlist, playlistId, externalId, {
+            showError: true,
+            manageSyncing: true
+        });
+    }
 
+    private async refreshNetEaseRecommendedPlaylistInBackground(
+        playlist: UINextPlaylist,
+        playlistId: string,
+        externalId: number
+    ): Promise<void> {
+        await this.refreshNetEaseRecommendedPlaylist(playlist, playlistId, externalId, {
+            showError: false,
+            manageSyncing: false
+        });
+    }
+
+    private async refreshNetEaseRecommendedPlaylist(
+        playlist: UINextPlaylist,
+        playlistId: string,
+        externalId: number,
+        options: {showError: boolean; manageSyncing: boolean}
+    ): Promise<void> {
         try {
             const tracks = await netEaseRecommendationService.getPlaylistTracks(externalId);
-            const uiTracks = tracks.map((track) => this.toUINextTrack(track, this.resolveSource(track)));
-            this.applyRemotePlaylistTracks(playlistId, uiTracks);
-            const existingIndex = this.shell.mock.playlists.findIndex((item) => item.id === playlistId);
-            const nextPlaylist = {
-                ...playlist,
-                trackCount: playlist.trackCount || uiTracks.length,
-                trackIds: uiTracks.map((track) => track.id)
-            };
-            this.ensureRuntimePlaylist(nextPlaylist, existingIndex);
+            this.applyNetEaseRecommendedPlaylistTracks(playlist, playlistId, tracks);
             this.shell.setPlaylistOpenState?.({
                 playlistId,
                 status: 'ready',
                 message: ''
             });
         } catch (error) {
-            console.warn('[ui-next] openNetEaseRecommendedPlaylist failed', error);
-            this.shell.setPlaylistOpenState?.({
-                playlistId,
-                status: 'error',
-                message: '\u7f51\u6613\u4e91\u63a8\u8350\u6b4c\u5355\u52a0\u8f7d\u5931\u8d25\uff0c\u53ef\u91cd\u8bd5\u6216\u8fd4\u56de\u9996\u9875\u3002'
-            });
+            console.warn('[ui-next] refreshNetEaseRecommendedPlaylist failed', error);
+            if (options.showError) {
+                this.shell.setPlaylistOpenState?.({
+                    playlistId,
+                    status: 'error',
+                    message: '\u7f51\u6613\u4e91\u63a8\u8350\u6b4c\u5355\u52a0\u8f7d\u5931\u8d25\uff0c\u53ef\u91cd\u8bd5\u6216\u8fd4\u56de\u9996\u9875\u3002'
+                });
+            }
         } finally {
-            this.shell.state.syncing = false;
+            if (options.manageSyncing) {
+                this.shell.state.syncing = false;
+            }
             this.shell.render();
         }
+    }
+
+    private applyNetEaseRecommendedPlaylistTracks(
+        playlist: UINextPlaylist,
+        playlistId: string,
+        tracks: Track[]
+    ): UINextTrack[] {
+        const uiTracks = tracks.map((track) => this.toUINextTrack(track, this.resolveSource(track)));
+        this.applyRemotePlaylistTracks(playlistId, uiTracks);
+        const existingIndex = this.shell.mock.playlists.findIndex((item) => item.id === playlistId);
+        const nextPlaylist = {
+            ...playlist,
+            trackCount: playlist.trackCount || uiTracks.length,
+            trackIds: uiTracks.map((track) => track.id)
+        };
+        this.ensureRuntimePlaylist(nextPlaylist, existingIndex);
+        return uiTracks;
     }
 
     private applyRemotePlaylistTracks(playlistId: string, uiTracks: UINextTrack[]): void {
@@ -1949,6 +2023,7 @@ export class UINextMusicBoxAdapter {
                 await this.refreshLibrarySnapshotAfterNetEaseMigration();
                 this.refreshMigrationDashboardState();
                 this.refreshNetEaseAccountCenterState();
+                this.shell.completeMigrationOnboarding?.('account-menu-migration');
                 this.openMigrationDashboard();
             } finally {
                 this.netEaseAssetMigrationInFlight = false;
@@ -2192,6 +2267,64 @@ export class UINextMusicBoxAdapter {
         await this.requestLibrarySnapshotRefresh();
     }
 
+    async waitForInitialShellReady(timeoutMs = 10000): Promise<boolean> {
+        if (!this.initialShellReadyPromise) {
+            return true;
+        }
+
+        return await Promise.race([
+            this.initialShellReadyPromise.then(() => true).catch(() => false),
+            new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), timeoutMs))
+        ]);
+    }
+
+    private async refreshInitialNetEaseStateInBackground(): Promise<void> {
+        await this.waitForNetEaseApiReadyForInitialShell();
+        await Promise.allSettled([
+            this.refreshNetEaseRecommendations({force: true}),
+            this.syncNetEaseStatus(0, {force: true})
+        ]);
+    }
+
+    private waitForNetEaseApiReadyForInitialShell(timeoutMs = 6500): Promise<boolean> {
+        const neteaseApi = window.electronAPI?.netease;
+        if (!neteaseApi) {
+            return Promise.resolve(false);
+        }
+
+        const snapshot = neteaseApi.getApiStatus?.();
+        if (snapshot?.state === 'ready') {
+            netEaseApiClient.setApiEndpoint(snapshot.data.endpoint);
+            return Promise.resolve(true);
+        }
+        if (snapshot?.state === 'unavailable') {
+            netEaseApiClient.setApiEndpoint(snapshot.data.endpoint);
+            return Promise.resolve(false);
+        }
+
+        return new Promise((resolve) => {
+            let settled = false;
+            let readyUnsubscribe: (() => void) | undefined;
+            let unavailableUnsubscribe: (() => void) | undefined;
+            const finish = (ready: boolean, endpoint?: string): void => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                if (endpoint) {
+                    netEaseApiClient.setApiEndpoint(endpoint);
+                }
+                window.clearTimeout(timer);
+                readyUnsubscribe?.();
+                unavailableUnsubscribe?.();
+                resolve(ready);
+            };
+            const timer = window.setTimeout(() => finish(false), timeoutMs);
+            readyUnsubscribe = neteaseApi.onApiReady((data) => finish(true, data.endpoint));
+            unavailableUnsubscribe = neteaseApi.onApiUnavailable((data) => finish(false, data.endpoint));
+        });
+    }
+
     toggleOfflinePlayableFilter(): void {
         this.shell.state.offlineFilter = !this.shell.state.offlineFilter;
         this.shell.render();
@@ -2251,16 +2384,20 @@ export class UINextMusicBoxAdapter {
                 name: playlist.name,
                 description: playlist.description,
                 cover: this.resolvePlaylistCover(playlist),
+                coverSourceUrl: this.resolvePlaylistCover(playlist),
                 trackCount: playlist.trackCount || playlist.trackIds?.length || playlist.tracks?.length || 0,
                 source: this.resolvePlaylistSource(playlist),
                 externalId: this.getPlaylistExternalId(playlist),
                 externalType: this.getPlaylistExternalType(playlist),
                 updatedAt: playlist.modifiedAt ? new Date(playlist.modifiedAt).toLocaleDateString() : undefined,
                 trackIds: playlist.trackIds || (playlist.tracks || []).map((track) => this.trackId(track))
-            })).map((playlist) => ({
-                ...playlist,
-                cover: playlistCoverManifest.resolveCachedPlaylistCover(playlist) || playlist.cover
-            }));
+            })).map((playlist) => {
+                const cachedPlaylistCover = playlistCoverManifest.resolveCachedPlaylistCover(playlist);
+                return {
+                    ...playlist,
+                    cover: cachedPlaylistCover || (this.isRemoteCoverUrl(playlist.cover) ? undefined : playlist.cover)
+                };
+            });
             this.shell.mock.playlists = uiPlaylists;
             void playlistCoverManifest.preloadStableCoverMetadata(uiPlaylists);
             this.shell.mock.byId = (trackId: string) => {
@@ -2297,7 +2434,6 @@ export class UINextMusicBoxAdapter {
             }
 
             this.shell.render();
-            void this.refreshNetEaseRecommendations();
         } catch (error) {
             console.error('[ui-next] failed to load library snapshot', error);
         }
@@ -2394,31 +2530,46 @@ export class UINextMusicBoxAdapter {
     private refreshPlaylistDerivedSurfaces(): void {
         this.shell.state.homeRecommended = this.shell.mock.playlists.filter((playlist) => playlist.source === 'local');
         this.shell.state.homeNetEase = this.buildNetEaseRecommendedPlaylists();
+        this.scheduleNetEaseRecommendationCoverHydration(this.shell.state.homeNetEase);
         this.refreshMigrationDashboardState();
         this.refreshNetEaseAccountCenterState();
     }
 
-    private async refreshNetEaseRecommendations(): Promise<void> {
-        if (this.neteaseRecommendationRefreshPromise) {
+    private async refreshNetEaseRecommendations(options: {force?: boolean} = {}): Promise<void> {
+        if (this.neteaseRecommendationRefreshPromise && !options.force) {
             return this.neteaseRecommendationRefreshPromise;
         }
 
         this.neteaseRecommendationRefreshPromise = (async () => {
             try {
-                const [dailySongs, recommendedPlaylists] = await Promise.all([
-                    netEaseRecommendationService.getDailySongs(),
-                    netEaseRecommendationService.getRecommendedPlaylists(12)
+                const [dailySongsResult, recommendedPlaylistsResult] = await Promise.allSettled([
+                    netEaseRecommendationService.getDailySongs(options),
+                    netEaseRecommendationService.getRecommendedPlaylists(12, options)
                 ]);
+                const dailySongs = dailySongsResult.status === 'fulfilled' ? dailySongsResult.value : [];
+                const recommendedPlaylists = recommendedPlaylistsResult.status === 'fulfilled' ? recommendedPlaylistsResult.value : [];
 
-                this.neteaseRecommendedSongs = dailySongs
-                    .map((track) => this.toUINextTrack(track, this.resolveSource(track)))
-                    .slice(0, 30);
-                this.neteaseRecommendedPlaylists = recommendedPlaylists;
+                if (dailySongsResult.status === 'rejected') {
+                    console.warn('[ui-next] refreshNetEaseRecommendations daily songs failed', dailySongsResult.reason);
+                }
+                if (recommendedPlaylistsResult.status === 'rejected') {
+                    console.warn('[ui-next] refreshNetEaseRecommendations playlists failed', recommendedPlaylistsResult.reason);
+                }
+
+                if (dailySongs.length > 0) {
+                    this.neteaseRecommendedSongs = dailySongs
+                        .map((track) => this.toUINextTrack(track, this.resolveSource(track)))
+                        .slice(0, 30);
+                }
+                if (recommendedPlaylists.length > 0) {
+                    this.neteaseRecommendedPlaylists = recommendedPlaylists;
+                }
 
                 const history = this.shell.state.homeRecent || [];
                 const favorites = this.shell.state.homeFavorites || [];
                 const libraryTracks = this.shell.mock.tracks || [];
                 this.shell.state.homeNetEase = this.buildNetEaseRecommendedPlaylists();
+                this.scheduleNetEaseRecommendationCoverHydration(this.shell.state.homeNetEase);
                 this.shell.state.homeDailyDesktop = this.buildDailyMusicDesktop(
                     libraryTracks,
                     history,
@@ -2437,22 +2588,30 @@ export class UINextMusicBoxAdapter {
     }
 
     private buildNetEaseRecommendedPlaylists(): UINextPlaylist[] {
-        const syncedPlaylists = this.shell.mock.playlists.filter((playlist) => playlist.source === 'netease');
-        const apiPlaylists = this.neteaseRecommendedPlaylists.map((playlist) => ({
-            id: `netease-recommend-${playlist.id}`,
-            name: playlist.name,
-            description: playlist.description,
-            cover: playlist.cover,
-            trackCount: playlist.trackCount,
-            playCount: playlist.playCount,
-            source: 'netease' as UINextSource,
-            externalId: String(playlist.id),
-            externalType: 'recommendation',
-            trackIds: []
-        }));
+        const apiPlaylists = this.neteaseRecommendedPlaylists.map((playlist) => {
+            const coverSourceUrl = playlist.cover;
+            const uiPlaylist = {
+                id: `netease-recommend-${playlist.id}`,
+                name: playlist.name,
+                description: playlist.description,
+                cover: coverSourceUrl,
+                coverSourceUrl,
+                trackCount: playlist.trackCount,
+                playCount: playlist.playCount,
+                source: 'netease' as UINextSource,
+                externalId: String(playlist.id),
+                externalType: 'recommendation',
+                trackIds: []
+            };
+            const cachedPlaylistCover = playlistCoverManifest.resolveCachedPlaylistCover(uiPlaylist);
+            return {
+                ...uiPlaylist,
+                cover: cachedPlaylistCover || (this.isRemoteCoverUrl(uiPlaylist.cover) ? undefined : uiPlaylist.cover)
+            };
+        });
 
         const seen = new Set<string>();
-        return [...apiPlaylists, ...syncedPlaylists].filter((playlist) => {
+        return apiPlaylists.filter((playlist) => {
             const key = playlist.externalId || playlist.id;
             if (seen.has(key)) {
                 return false;
@@ -2460,6 +2619,41 @@ export class UINextMusicBoxAdapter {
             seen.add(key);
             return true;
         });
+    }
+
+    private scheduleNetEaseRecommendationCoverHydration(playlists: UINextPlaylist[]): void {
+        const candidates = playlists.filter((playlist) => Boolean(playlist.coverSourceUrl));
+        if (candidates.length === 0) {
+            return;
+        }
+
+        void playlistCoverManifest.preloadStableCoverMetadata(candidates);
+        for (const playlist of candidates) {
+            const key = `${playlist.externalId || playlist.id}:${playlist.coverSourceUrl}`;
+            if (this.neteaseRecommendationCoverHydrationKeys.has(key)) {
+                continue;
+            }
+            this.neteaseRecommendationCoverHydrationKeys.add(key);
+            void playlistCoverManifest.ensurePlaylistCover(playlist).then(() => {
+                const cover = playlistCoverManifest.resolveCachedPlaylistCover(playlist);
+                if (!cover) {
+                    return;
+                }
+                const current = this.shell.state.homeNetEase || [];
+                const index = current.findIndex((item) => item.id === playlist.id);
+                if (index < 0) {
+                    return;
+                }
+                current[index] = {
+                    ...current[index],
+                    cover,
+                    coverSourceUrl: playlist.coverSourceUrl
+                };
+                this.shell.render();
+            }).finally(() => {
+                this.neteaseRecommendationCoverHydrationKeys.delete(key);
+            });
+        }
     }
 
     private refreshMigrationDashboardState(): void {
@@ -2874,6 +3068,7 @@ export class UINextMusicBoxAdapter {
 
     private normalizeRegionTone(value: unknown): string {
         switch (value) {
+            case 'default':
             case 'peach-blush':
             case 'lilac-sun':
             case 'candy-violet':
@@ -2882,36 +3077,23 @@ export class UINextMusicBoxAdapter {
             case 'lime-mint':
                 return value;
             default:
-                return 'peach-blush';
+                return 'default';
         }
     }
 
-    private loadImmersiveSettingsSnapshot(options: {resetSonicBackground?: boolean} = {}): void {
+    private loadImmersiveSettingsSnapshot(): void {
         const settings = this.readImmersiveSettings();
-        const entryBackgroundType = options.resetSonicBackground && settings.backgroundType === 'sonic-topography'
-            ? 'cover'
-            : settings.backgroundType;
-        const entrySettings = entryBackgroundType === settings.backgroundType
-            ? settings
-            : {
-                ...settings,
-                backgroundType: entryBackgroundType,
-                backgroundSrc: '',
-                backgroundOriginalSrc: '',
-                backgroundOptimizedSrc: '',
-                backgroundOptimizedPreset: ''
-            };
         this.shell.state.immersiveLyricsMode = settings.lyricsMode;
         this.shell.state.immersiveVisualizerStyle = settings.visualizerStyle;
         this.shell.state.immersiveBackground = {
-            type: entrySettings.backgroundType,
-            src: this.resolveImmersiveBackgroundSrc(entrySettings),
-            originalSrc: entrySettings.backgroundOriginalSrc || '',
-            status: entrySettings.backgroundType === 'video' && (entrySettings.backgroundOptimizedSrc || entrySettings.backgroundQuality === 'original') ? 'optimized' : 'idle',
-            statusText: entrySettings.backgroundType === 'video'
-                ? (entrySettings.backgroundQuality === 'original' ? '\u539f\u7247\u76f4\u51fa' : (entrySettings.backgroundOptimizedSrc ? '\u6b63\u5728\u4f7f\u7528\u7f13\u5b58' : ''))
+            type: settings.backgroundType,
+            src: this.resolveImmersiveBackgroundSrc(settings),
+            originalSrc: settings.backgroundOriginalSrc || '',
+            status: settings.backgroundType === 'video' && (settings.backgroundOptimizedSrc || settings.backgroundQuality === 'original') ? 'optimized' : 'idle',
+            statusText: settings.backgroundType === 'video'
+                ? (settings.backgroundQuality === 'original' ? '\u539f\u7247\u76f4\u51fa' : (settings.backgroundOptimizedSrc ? '\u6b63\u5728\u4f7f\u7528\u7f13\u5b58' : ''))
                 : '',
-            quality: entrySettings.backgroundQuality
+            quality: settings.backgroundQuality
         };
     }
 
@@ -3055,6 +3237,21 @@ export class UINextMusicBoxAdapter {
     }
 
     private async syncNetEaseStatus(attempt = 0, options: {force?: boolean} = {}): Promise<void> {
+        if (attempt === 0) {
+            if (this.netEaseStatusRefreshPromise) {
+                return this.netEaseStatusRefreshPromise;
+            }
+            this.netEaseStatusRefreshPromise = this.runNetEaseStatusRefresh(attempt, options)
+                .finally(() => {
+                    this.netEaseStatusRefreshPromise = null;
+                });
+            return this.netEaseStatusRefreshPromise;
+        }
+
+        return await this.runNetEaseStatusRefresh(attempt, options);
+    }
+
+    private async runNetEaseStatusRefresh(attempt = 0, options: {force?: boolean} = {}): Promise<void> {
         const session = ++this.netEaseStatusRefreshSession;
         if (this.netEaseUnavailableRecoveryTimer) {
             window.clearTimeout(this.netEaseUnavailableRecoveryTimer);
@@ -3069,7 +3266,7 @@ export class UINextMusicBoxAdapter {
         });
 
         try {
-            const available = await netEaseApiClient.checkAvailability();
+            const available = this.isNetEaseApiKnownReady() || await netEaseApiClient.checkAvailability();
             if (session !== this.netEaseStatusRefreshSession) {
                 return;
             }
@@ -3113,6 +3310,15 @@ export class UINextMusicBoxAdapter {
                 lastSyncText: this.formatNetEaseSyncTime(this.lastNetEaseSyncAt)
             });
         }
+    }
+
+    private isNetEaseApiKnownReady(): boolean {
+        const status = window.electronAPI?.netease?.getApiStatus?.();
+        if (status?.state !== 'ready') {
+            return false;
+        }
+        netEaseApiClient.setApiEndpoint(status.data.endpoint);
+        return true;
     }
 
     private handleNetEaseApiUnavailable(): void {
@@ -3198,6 +3404,10 @@ export class UINextMusicBoxAdapter {
                 return;
             }
 
+            if (this.isTemporaryProbeTrack(trackToLoad)) {
+                return;
+            }
+
             const loaded = await playbackController.loadTrack(trackToLoad.filePath || trackToLoad.path || '');
             if (loaded && position > 0) {
                 await playbackController.setPosition(position);
@@ -3215,6 +3425,12 @@ export class UINextMusicBoxAdapter {
         } catch (error) {
             console.error('[ui-next] restorePlaybackMemory failed', error);
         }
+    }
+
+    private isTemporaryProbeTrack(track: Track): boolean {
+        const filePath = String(track.filePath || track.path || '');
+        return /(?:^|[\\/])AuraluxProbe[\\/]/.test(filePath)
+            || /auralux-spectrum-probe/i.test(filePath);
     }
 
     private resolvePlaybackMemoryCandidate(
@@ -3289,6 +3505,7 @@ export class UINextMusicBoxAdapter {
             tracks: queue,
             currentIndex: state.currentIndex
         };
+        this.schedulePlaybackTrackCoverRefresh(displayTrack);
     }
 
     private resolvePlaybackDisplayTrack(currentTrack: Track, playlist: Track[], currentIndex: number): Track;
@@ -3438,10 +3655,129 @@ export class UINextMusicBoxAdapter {
         }
     }
 
+    private async playPreparedTrack(track: Track, queue: Track[], startIndex: number, source: string): Promise<boolean> {
+        const requestSeq = ++this.playbackRequestSeq;
+        const rollbackSnapshot = await this.capturePlaybackRollbackSnapshot();
+        this.applyPendingTrack(track, queue, startIndex);
+
+        try {
+            await playbackController.setPlaylist(queue, startIndex);
+            const loaded = await playbackController.loadTrack(track.filePath);
+            const played = loaded ? await playbackController.play() : false;
+            if (!this.isPlaybackRequestCurrent(requestSeq)) {
+                return false;
+            }
+            if (played) {
+                this.syncPlaybackState();
+                return true;
+            }
+            if (!this.isPlaybackRequestCurrent(requestSeq)) {
+                return false;
+            }
+
+            showToast('播放失败，已恢复当前播放状态', 'error', 2200);
+            await this.restorePlaybackSnapshot(rollbackSnapshot, requestSeq);
+            return false;
+        } catch (error) {
+            if (!this.isPlaybackRequestCurrent(requestSeq)) {
+                return false;
+            }
+            console.error(`[ui-next] ${source} failed`, error);
+            showToast('播放失败，已恢复当前播放状态', 'error', 2200);
+            await this.restorePlaybackSnapshot(rollbackSnapshot, requestSeq);
+            return false;
+        }
+    }
+
+    private isPlaybackRequestCurrent(requestSeq: number): boolean {
+        return requestSeq === this.playbackRequestSeq;
+    }
+
+    private async restorePlaybackSnapshot(snapshot: UINextPlaybackRollbackSnapshot, requestSeq?: number): Promise<void> {
+        try {
+            if (requestSeq != null && !this.isPlaybackRequestCurrent(requestSeq)) {
+                return;
+            }
+            await playbackController.setPlaylist(snapshot.playlist, snapshot.currentIndex);
+            if (requestSeq != null && !this.isPlaybackRequestCurrent(requestSeq)) {
+                return;
+            }
+            if (snapshot.currentTrack?.filePath) {
+                const loaded = await playbackController.loadTrack(snapshot.currentTrack.filePath);
+                if (requestSeq != null && !this.isPlaybackRequestCurrent(requestSeq)) {
+                    return;
+                }
+                if (loaded && snapshot.position > 0) {
+                    await playbackController.seek(snapshot.position);
+                    if (requestSeq != null && !this.isPlaybackRequestCurrent(requestSeq)) {
+                        return;
+                    }
+                }
+                if (snapshot.isPlaying) {
+                    if (loaded) {
+                        await playbackController.play();
+                    }
+                } else {
+                    await playbackController.pause();
+                }
+            } else {
+                await playbackController.pause();
+            }
+        } catch (error) {
+            console.error('[ui-next] restorePlaybackSnapshot failed', error);
+        } finally {
+            if (requestSeq == null || this.isPlaybackRequestCurrent(requestSeq)) {
+                this.syncPlaybackState();
+            }
+        }
+    }
+
+    private async loadPreparedTrack(track: Track, queue: Track[], startIndex: number, source: string): Promise<boolean> {
+        const requestSeq = ++this.playbackRequestSeq;
+        const rollbackSnapshot = await this.capturePlaybackRollbackSnapshot();
+        this.applyPendingTrack(track, queue, startIndex);
+
+        try {
+            await playbackController.setPlaylist(queue, startIndex);
+            const loaded = await playbackController.loadTrack(track.filePath);
+            if (!this.isPlaybackRequestCurrent(requestSeq)) {
+                return false;
+            }
+            if (loaded) {
+                await playbackController.pause();
+                this.syncPlaybackState();
+                return true;
+            }
+
+            showToast('Load failed, restored previous playback state', 'error', 2200);
+            await this.restorePlaybackSnapshot(rollbackSnapshot, requestSeq);
+            return false;
+        } catch (error) {
+            if (!this.isPlaybackRequestCurrent(requestSeq)) {
+                return false;
+            }
+            console.error(`[ui-next] ${source} failed`, error);
+            showToast('Load failed, restored previous playback state', 'error', 2200);
+            await this.restorePlaybackSnapshot(rollbackSnapshot, requestSeq);
+            return false;
+        }
+    }
+
+    private async capturePlaybackRollbackSnapshot(): Promise<UINextPlaybackRollbackSnapshot> {
+        const state = playbackController.getState();
+        return {
+            playlist: (state.playlist || []).slice(),
+            currentIndex: state.currentIndex,
+            currentTrack: state.currentTrack || null,
+            position: await playbackController.getPosition(),
+            isPlaying: Boolean(state.isPlaying)
+        };
+    }
+
     private applyPendingTrack(track: Track, queue: Track[], startIndex: number): void {
         this.shell.state.currentTrack = this.toUINextTrack(track, this.resolveSource(track));
         this.updateCurrentPlaybackBadges();
-        this.shell.state.isPlaying = true;
+        this.shell.state.isPlaying = false;
         this.shell.state.position = 0;
         this.shell.state.duration = track.duration || 0;
         this.shell.state.queue = {
@@ -3816,8 +4152,11 @@ export class UINextMusicBoxAdapter {
         const failed = Number(sync?.failed || 0);
         const conflict = Number(sync?.conflict || 0);
         const retryable = Number(sync?.retryable || 0);
-        const warningCount = failed + conflict + retryable;
-        const statusText = warningCount > 0
+        const apiUnavailable = this.shell.state.neteaseStatus === 'offline';
+        const warningCount = failed + conflict + retryable + (apiUnavailable ? 1 : 0);
+        const statusText = apiUnavailable
+            ? '网易云连接需要处理'
+            : warningCount > 0
             ? `有 ${warningCount} 项需要处理`
             : (this.shell.state.neteaseSyncStatus || '等待同步');
         const lastActivity = dashboard?.summary?.lastActivityText || this.shell.state.neteaseLastSyncText || '尚未同步';
@@ -3825,7 +4164,7 @@ export class UINextMusicBoxAdapter {
         return {
             statusText,
             detailText: `网易云 ${this.shell.state.neteaseStatus || 'signed-out'} · ${lastActivity}`,
-            actionText: warningCount > 0 ? '查看迁移状态' : '同步状态正常',
+            actionText: apiUnavailable ? '打开诊断信息' : (warningCount > 0 ? '查看迁移状态' : '同步状态正常'),
             warningCount
         };
     }
@@ -3844,14 +4183,84 @@ export class UINextMusicBoxAdapter {
         return result;
     }
 
-    private resolveTrackCover(track: Track): string | null {
-        const cover = (track as Track & {coverImagePath?: unknown}).cover;
-        if (typeof cover === 'string' && cover.length > 0) {
+    private resolveTrackCover(track: Track, source: UINextSource = this.resolveSource(track)): string | null {
+        const runtimeCover = (track as Track & {cachedCover?: unknown}).cachedCover;
+        if (typeof runtimeCover === 'string' && runtimeCover.length > 0 && !this.isRemoteCoverUrl(runtimeCover)) {
+            return runtimeCover;
+        }
+
+        const coverSourceUrl = this.resolveTrackCoverSource(track);
+        if (!coverSourceUrl) {
+            return null;
+        }
+
+        if (!this.isRemoteCoverUrl(coverSourceUrl)) {
+            return coverSourceUrl;
+        }
+
+        const cachedCover = playlistCoverManifest.resolveCachedPlaylistCover(
+            this.toTrackCoverCacheIdentity(track, source, coverSourceUrl)
+        );
+        return cachedCover || null;
+    }
+
+    private resolveTrackCoverSource(track: Track): string | null {
+        const value = track as Track & {coverImagePath?: unknown; coverSourceUrl?: unknown; cachedCover?: unknown};
+        const coverSourceUrl = value.coverSourceUrl;
+        if (typeof coverSourceUrl === 'string' && coverSourceUrl.length > 0) {
+            return coverSourceUrl;
+        }
+
+        const cover = value.cover;
+        if (typeof cover === 'string' && cover.length > 0 && cover !== value.cachedCover) {
             return cover;
         }
 
-        const coverImagePath = (track as Track & {coverImagePath?: unknown}).coverImagePath;
+        const coverImagePath = value.coverImagePath;
         return typeof coverImagePath === 'string' && coverImagePath.length > 0 ? coverImagePath : null;
+    }
+
+    private toTrackCoverCacheIdentity(track: Track, source: UINextSource, coverSourceUrl: string): UINextPlaylistLike {
+        return {
+            id: this.trackId(track),
+            source: `track:${source}`,
+            externalId: String(track.id || track.fileId || track.filePath || this.trackId(track)),
+            cover: coverSourceUrl,
+            coverSourceUrl
+        };
+    }
+
+    private schedulePlaybackTrackCoverRefresh(track: Track | null): void {
+        if (!track) return;
+
+        const source = this.resolveSource(track);
+        const coverSourceUrl = this.resolveTrackCoverSource(track);
+        if (!coverSourceUrl || !this.isRemoteCoverUrl(coverSourceUrl)) {
+            return;
+        }
+
+        const identity = this.toTrackCoverCacheIdentity(track, source, coverSourceUrl);
+        const refreshKey = `${identity.source}:${identity.externalId || identity.id}:${coverSourceUrl}`;
+        if (this.lastPlaybackCoverRefreshKey === refreshKey) {
+            return;
+        }
+        this.lastPlaybackCoverRefreshKey = refreshKey;
+
+        void playlistCoverManifest.refreshPlaylistCover(identity).then(() => {
+            const cachedCover = playlistCoverManifest.resolveCachedPlaylistCover(identity);
+            if (!cachedCover) {
+                return;
+            }
+            (track as Track & {cachedCover?: string}).cachedCover = cachedCover;
+            this.refreshCurrentTrackSurfaces();
+            this.syncPlaybackState();
+            this.shell.render();
+        }).catch((error) => {
+            console.info('[ui-next] playback cover refresh skipped', {
+                trackId: identity.id,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        });
     }
 
     private resolveOfflineStatus(track: Track, source: UINextSource): {playable: boolean; label: string} {
@@ -3995,6 +4404,10 @@ export class UINextMusicBoxAdapter {
         const value = (playlist as {cover?: unknown; coverImage?: unknown; coverImagePath?: unknown});
         const cover = value.cover ?? value.coverImage ?? value.coverImagePath;
         return typeof cover === 'string' && cover.length > 0 ? cover : undefined;
+    }
+
+    private isRemoteCoverUrl(cover: string | undefined): boolean {
+        return typeof cover === 'string' && (cover.startsWith('http://') || cover.startsWith('https://'));
     }
 
     private getPlaylistExternalId(playlist: unknown): string | undefined {
