@@ -7,7 +7,7 @@ import {localLyricsManager} from './LocalLyricsManager';
 import {ttmlParser} from './TTMLParser';
 
 export class LyricsLookupService {
-    private readonly lyricsRequestLock = new Set<string>();
+    private readonly lyricsRequestLock = new Map<string, Promise<LyricsResult>>();
 
     async getLyrics(
         title: string,
@@ -15,13 +15,28 @@ export class LyricsLookupService {
         album = '',
         filePath: string | null = null
     ): Promise<LyricsResult> {
-        const lyricsKey = `${title}_${artist}_${album || ''}`;
-
-        if (this.lyricsRequestLock.has(lyricsKey)) {
-            return {success: false, error: '歌词获取已在进行中'};
+        const lyricsKey = `${filePath || ''}_${title}_${artist}_${album || ''}`;
+        const inFlight = this.lyricsRequestLock.get(lyricsKey);
+        if (inFlight) {
+            return await inFlight;
         }
 
-        this.lyricsRequestLock.add(lyricsKey);
+        const request = this.resolveLyricsRequest(title, artist, album, filePath)
+            .finally(() => {
+                if (this.lyricsRequestLock.get(lyricsKey) === request) {
+                    this.lyricsRequestLock.delete(lyricsKey);
+                }
+            });
+        this.lyricsRequestLock.set(lyricsKey, request);
+        return await request;
+    }
+
+    private async resolveLyricsRequest(
+        title: string,
+        artist: string,
+        album = '',
+        filePath: string | null = null
+    ): Promise<LyricsResult> {
         console.log(`📝 Lyrics: 获取歌词: ${title} - ${artist}${filePath ? ` (${filePath})` : ''}`);
 
         try {
@@ -64,8 +79,6 @@ export class LyricsLookupService {
                 error: this.getErrorMessage(error),
                 source: 'error'
             };
-        } finally {
-            this.lyricsRequestLock.delete(lyricsKey);
         }
     }
 

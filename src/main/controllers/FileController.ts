@@ -3,7 +3,7 @@
 import * as fs from 'fs';
 import {BaseController, Controller, IpcHandle} from '../decorators/IpcHandler';
 import {NetworkFileAdapter} from '../services/network/NetworkFileAdapter';
-import {createAudioStreamUrl} from '../services/audio/AudioStreamProtocol';
+import {createAudioStreamUrl, createRemoteAudioStreamUrl} from '../services/audio/AudioStreamProtocol';
 import {assertReadableAudioFilePath} from '../utils/audioFileSecurity';
 
 @Controller('file')
@@ -37,5 +37,10 @@ export class FileController extends BaseController {
     async createAudioStreamUrl(filePath: string): Promise<string> {
         const isNetworkPath = this.networkFileAdapter.isNetworkPath(filePath);
         return createAudioStreamUrl(filePath, isNetworkPath);
+    }
+
+    @IpcHandle('file:createRemoteAudioStreamUrl')
+    async createRemoteAudioStreamUrl(remoteUrl: string): Promise<string> {
+        return createRemoteAudioStreamUrl(remoteUrl);
     }
 }

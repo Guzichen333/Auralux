@@ -6,6 +6,10 @@ import type {LoadedWebAudioTrack, TrackMetadata, WebAudioTrack} from './WebAudio
 
 const NETEASE_STREAM_URL_CACHE_TTL_MS = 5 * 60 * 1000;
 const NETEASE_SONG_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
+const NETEASE_STREAM_URL_TIMEOUT_MS = 8000;
+const NETEASE_SONG_DETAIL_TIMEOUT_MS = 5000;
+const NETEASE_LYRICS_TIMEOUT_MS = 5000;
+const MEDIA_METADATA_TIMEOUT_MS = 10000;
 
 interface TimedCacheEntry<T> {
     value: T;
@@ -16,6 +20,31 @@ const neteaseStreamUrlCache = new Map<number, TimedCacheEntry<string>>();
 const neteaseSongDetailCache = new Map<number, TimedCacheEntry<TrackMetadata>>();
 const neteaseStreamUrlInFlight = new Map<number, Promise<string | null>>();
 const neteaseSongDetailInFlight = new Map<number, Promise<TrackMetadata>>();
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_resolve, reject) => {
+                timeoutId = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+            })
+        ]);
+    } finally {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+    }
+}
+
+async function withTimeoutFallback<T>(promise: Promise<T>, timeoutMs: number, fallback: T, label: string): Promise<T> {
+    try {
+        return await withTimeout(promise, timeoutMs, label);
+    } catch (error) {
+        console.warn(`${label} failed`, error);
+        return fallback;
+    }
+}
 
 function isHttpUrl(path: string): boolean {
     return path.startsWith('http://') || path.startsWith('https://');
@@ -61,7 +90,7 @@ async function fetchNeteaseStreamUrl(songId: number): Promise<string | null> {
         return await inFlight;
     }
 
-    const request = fetchNeteaseStreamUrlUncached(songId)
+    const request = withTimeout(fetchNeteaseStreamUrlUncached(songId), NETEASE_STREAM_URL_TIMEOUT_MS, 'NetEase stream URL request')
         .then((streamUrl) => {
             if (streamUrl) {
                 rememberCacheValue(neteaseStreamUrlCache, songId, streamUrl, NETEASE_STREAM_URL_CACHE_TTL_MS);
@@ -128,9 +157,11 @@ async function fetchNeteaseSongDetail(songId: number): Promise<TrackMetadata> {
         return await inFlight;
     }
 
-    const request = fetchNeteaseSongDetailUncached(songId)
+    const request = withTimeoutFallback(fetchNeteaseSongDetailUncached(songId), NETEASE_SONG_DETAIL_TIMEOUT_MS, {}, 'NetEase song detail request')
         .then((detail) => {
-            rememberCacheValue(neteaseSongDetailCache, songId, detail, NETEASE_SONG_DETAIL_CACHE_TTL_MS);
+            if (Object.keys(detail).length > 0) {
+                rememberCacheValue(neteaseSongDetailCache, songId, detail, NETEASE_SONG_DETAIL_CACHE_TTL_MS);
+            }
             return detail;
         })
         .finally(() => {
@@ -163,7 +194,7 @@ async function fetchNeteaseSongDetailUncached(songId: number): Promise<TrackMeta
 
 async function fetchNeteaseLyrics(songId: number) {
     try {
-        return await netEaseLyricsService.getLyrics(songId);
+        return await withTimeout(netEaseLyricsService.getLyrics(songId), NETEASE_LYRICS_TIMEOUT_MS, 'NetEase lyrics request');
     } catch {
         return null;
     }
@@ -176,6 +207,8 @@ class WebAudioTrackLoader {
         let lyrics: WebAudioTrack['lyrics'] | null = null;
         let lyricsFormat: string | null = null;
         let lyricsContent: string | null = null;
+        let neteaseSongIdForHydration: number | null = null;
+        let prepared = false;
 
         if (isNeteaseUrl(filePath)) {
             const songId = getNeteaseSongId(filePath);
@@ -183,28 +216,13 @@ class WebAudioTrackLoader {
                 throw Error('无效的网易云歌曲链接');
             }
 
-            const [streamUrl, songDetail, lyricsResult] = await Promise.all([
-                fetchNeteaseStreamUrl(songId),
-                fetchNeteaseSongDetail(songId),
-                fetchNeteaseLyrics(songId)
-            ]);
-
-            if (!streamUrl) {
-                throw new Error('网易云播放地址为空');
-            }
-
-            sourceUrl = streamUrl;
-            metadata = songDetail;
-
-            if (lyricsResult?.yrcLines && lyricsResult.yrcLines.length > 0) {
-                lyrics = lyricsResult.yrcLines;
-                lyricsFormat = 'yrc';
-                lyricsContent = lyricsResult.yrc || null;
-            } else if (lyricsResult?.lrc) {
-                lyrics = lyricsResult.lrc;
-                lyricsFormat = 'lrc';
-                lyricsContent = lyricsResult.lrc;
-            }
+            neteaseSongIdForHydration = songId;
+            const songDetailPromise = fetchNeteaseSongDetail(songId);
+            const lyricsPromise = fetchNeteaseLyrics(songId);
+            sourceUrl = await this.prepareNeteaseElementWithRetry(songId, audioElement, preload);
+            prepared = true;
+            metadata = getFreshCacheValue(neteaseSongDetailCache, songId) || {};
+            void Promise.all([songDetailPromise, lyricsPromise]).catch(() => null);
         } else if (isHttpUrl(filePath)) {
             sourceUrl = filePath;
             metadata = {};
@@ -213,8 +231,10 @@ class WebAudioTrackLoader {
             metadata = await this.getTrackMetadata(filePath);
         }
 
-        this.prepareElement(audioElement, sourceUrl, preload);
-        await this.waitForMetadata(audioElement);
+        if (!prepared) {
+            this.prepareElement(audioElement, sourceUrl, preload);
+            await this.waitForMetadata(audioElement);
+        }
 
         const mediaDuration = Number.isFinite(audioElement.duration) && audioElement.duration > 0
             ? audioElement.duration
@@ -240,10 +260,70 @@ class WebAudioTrackLoader {
             lyricsContent: lyricsContent || undefined
         };
 
+        if (neteaseSongIdForHydration) {
+            this.hydrateNeteaseTrackMetadata(track, neteaseSongIdForHydration);
+        }
+
         return {
             duration,
             track
         };
+    }
+
+    private async prepareNeteaseElementWithRetry(songId: number, audioElement: HTMLAudioElement, preload: boolean): Promise<string> {
+        const sourceUrl = await this.createNeteaseRemoteSourceUrl(songId, false);
+        try {
+            this.prepareElement(audioElement, sourceUrl, preload);
+            await this.waitForMetadata(audioElement);
+            return sourceUrl;
+        } catch (firstError) {
+            neteaseStreamUrlCache.delete(songId);
+            console.warn('NetEase stream URL failed during media load; refreshing once', firstError);
+            const retrySourceUrl = await this.createNeteaseRemoteSourceUrl(songId, true);
+            this.prepareElement(audioElement, retrySourceUrl, preload);
+            await this.waitForMetadata(audioElement);
+            return retrySourceUrl;
+        }
+    }
+
+    private async createNeteaseRemoteSourceUrl(songId: number, forceRefresh: boolean): Promise<string> {
+        if (forceRefresh) {
+            neteaseStreamUrlCache.delete(songId);
+        }
+
+        const streamUrl = await fetchNeteaseStreamUrl(songId);
+
+        if (!streamUrl) {
+            throw new Error('网易云播放地址为空');
+        }
+
+        return await audioFileReaderService.createRemoteAudioStreamUrl(streamUrl);
+    }
+
+    private hydrateNeteaseTrackMetadata(track: WebAudioTrack, songId: number): void {
+        void Promise.all([fetchNeteaseSongDetail(songId), fetchNeteaseLyrics(songId)])
+            .then(([songDetail, lyricsResult]) => {
+                Object.assign(track, {
+                    title: songDetail.title || track.title,
+                    artist: songDetail.artist || track.artist,
+                    album: songDetail.album || track.album,
+                    duration: songDetail.duration || track.duration,
+                    cover: songDetail.cover || track.cover
+                });
+
+                if (lyricsResult?.yrcLines && lyricsResult.yrcLines.length > 0) {
+                    track.lyrics = lyricsResult.yrcLines;
+                    track.lyricsFormat = 'yrc';
+                    track.lyricsContent = lyricsResult.yrc || undefined;
+                } else if (lyricsResult?.lrc) {
+                    track.lyrics = lyricsResult.lrc;
+                    track.lyricsFormat = 'lrc';
+                    track.lyricsContent = lyricsResult.lrc;
+                }
+            })
+            .catch((error) => {
+                console.warn('NetEase metadata hydration failed', error);
+            });
     }
 
     private resolvePlaybackDuration(metadataDuration: number | undefined, mediaDuration: number, neteaseTrack: boolean): number {
@@ -277,7 +357,12 @@ class WebAudioTrackLoader {
         }
 
         await new Promise<void>((resolve, reject) => {
+            const timeoutId = setTimeout(() => {
+                cleanup();
+                reject(new Error(`Timed out waiting for media metadata: ${audioElement.src}`));
+            }, MEDIA_METADATA_TIMEOUT_MS);
             const cleanup = () => {
+                clearTimeout(timeoutId);
                 audioElement.removeEventListener('loadedmetadata', handleMetadata);
                 audioElement.removeEventListener('error', handleError);
                 audioElement.removeEventListener('abort', handleAbort);
