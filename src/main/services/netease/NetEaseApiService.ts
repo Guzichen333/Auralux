@@ -16,7 +16,6 @@ export class NetEaseApiService {
     private readonly healthPath = '/login/status';
     private process: ChildProcessWithoutNullStreams | null = null;
     private startedByMusicBox = false;
-    private externalEndpointAdopted = false;
 
     constructor(options: NetEaseApiServiceOptions = {}) {
         this.preferredPort = options.port ?? 3000;
@@ -30,13 +29,9 @@ export class NetEaseApiService {
     }
 
     async start(): Promise<boolean> {
+        this.port = this.preferredPort;
         if (this.process) {
             return await this.isAvailable();
-        }
-
-        if (await this.probeNetEaseApi(this.endpoint)) {
-            console.log(`NetEase API already available at ${this.endpoint}`);
-            return true;
         }
 
         const entry = this.resolveApiEntry();
@@ -46,10 +41,6 @@ export class NetEaseApiService {
         }
 
         this.port = await this.findLaunchPort();
-        if (this.externalEndpointAdopted) {
-            console.log(`NetEase API already available at ${this.endpoint}`);
-            return true;
-        }
         const nodeExecutable = process.env.MUSICBOX_NETEASE_NODE || this.resolveNodeExecutable();
         const env = {
             ...process.env,
@@ -89,6 +80,7 @@ export class NetEaseApiService {
             console.log(`NetEase API started at ${this.endpoint}`);
         } else {
             console.warn(`NetEase API did not become ready within ${this.startupTimeoutMs}ms`);
+            await this.stopSpawnedProcess(this.process);
         }
         return ready;
     }
@@ -119,6 +111,33 @@ export class NetEaseApiService {
         });
     }
 
+    private async stopSpawnedProcess(child: ChildProcessWithoutNullStreams | null): Promise<void> {
+        if (!child) {
+            return;
+        }
+
+        this.startedByMusicBox = false;
+        if (this.process === child) {
+            this.process = null;
+        }
+
+        await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => {
+                if (!child.killed) {
+                    child.kill('SIGKILL');
+                }
+                resolve();
+            }, 3000);
+
+            child.once('exit', () => {
+                clearTimeout(timeout);
+                resolve();
+            });
+
+            child.kill();
+        });
+    }
+
     async isAvailable(): Promise<boolean> {
         return this.probeNetEaseApi(this.endpoint);
     }
@@ -126,19 +145,11 @@ export class NetEaseApiService {
     private async findLaunchPort(): Promise<number> {
         for (let offset = 0; offset < 20; offset++) {
             const candidate = this.preferredPort + offset;
-            const endpoint = `http://${this.host}:${candidate}`;
-            if (await this.probeNetEaseApi(endpoint)) {
-                this.port = candidate;
-                this.externalEndpointAdopted = true;
-                return candidate;
-            }
             if (await this.isPortAvailable(candidate)) {
-                this.externalEndpointAdopted = false;
                 return candidate;
             }
         }
 
-        this.externalEndpointAdopted = false;
         return this.preferredPort;
     }
 
